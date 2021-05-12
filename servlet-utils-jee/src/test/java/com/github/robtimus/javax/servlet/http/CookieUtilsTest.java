@@ -101,6 +101,7 @@ class CookieUtilsTest {
     }
 
     @Nested
+    @DisplayName("cookieStream(HttpServletRequest)")
     class CookieStream {
 
         @Test

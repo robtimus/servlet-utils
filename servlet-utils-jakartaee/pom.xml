@@ -82,13 +82,6 @@
 
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-proxy</artifactId>
-      <version>${version.jetty-servlet}</version>
-      <scope>test</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-client</artifactId>
       <scope>test</scope>
     </dependency>
@@ -157,6 +150,21 @@
             <configuration>
               <bundleName>com.github.robtimus.jakarta.servlet.servlet-utils-jakartaee</bundleName>
               <className>com.github.robtimus.jakarta.servlet.Messages</className>
+              <licenseText>Apache-2.0</licenseText>
+              <licenseCopyrightHolder>Rob Spoor</licenseCopyrightHolder>
+              <licenseCopyrightYear>2021</licenseCopyrightYear>
+              <publicVisibility>false</publicVisibility>
+              <suppressWarnings>nls</suppressWarnings>
+            </configuration>
+          </execution>
+          <execution>
+            <id>generate-http-messages</id>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <configuration>
+              <bundleName>com.github.robtimus.jakarta.servlet.http.servlet-utils-jakartaee-http</bundleName>
+              <className>com.github.robtimus.jakarta.servlet.http.Messages</className>
               <licenseText>Apache-2.0</licenseText>
               <licenseCopyrightHolder>Rob Spoor</licenseCopyrightHolder>
               <licenseCopyrightYear>2021</licenseCopyrightYear>

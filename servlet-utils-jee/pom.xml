@@ -156,6 +156,21 @@
               <suppressWarnings>nls</suppressWarnings>
             </configuration>
           </execution>
+          <execution>
+            <id>generate-http-messages</id>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <configuration>
+              <bundleName>com.github.robtimus.javax.servlet.http.servlet-utils-jee-http</bundleName>
+              <className>com.github.robtimus.javax.servlet.http.Messages</className>
+              <licenseText>Apache-2.0</licenseText>
+              <licenseCopyrightHolder>Rob Spoor</licenseCopyrightHolder>
+              <licenseCopyrightYear>2021</licenseCopyrightYear>
+              <publicVisibility>false</publicVisibility>
+              <suppressWarnings>nls</suppressWarnings>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
 

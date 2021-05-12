@@ -8108,14 +8108,14 @@ class BodyCapturingFilterTest {
         }
 
         @Override
-        protected void bodyProduced(BodyCapturingResponse response) {
+        protected void bodyProduced(BodyCapturingResponse response, HttpServletRequest request) {
             if (!capturedDataForResponseBodyProduced.compareAndSet(null, new CapturedData(response))) {
                 throw new IllegalStateException("bodyProduced should only be called once per response");
             }
         }
 
         @Override
-        protected void limitReached(BodyCapturingResponse response) {
+        protected void limitReached(BodyCapturingResponse response, HttpServletRequest request) {
             if (!capturedDataForResponseLimitReached.compareAndSet(null, new CapturedData(response))) {
                 throw new IllegalStateException("limitReached should only be called once per response");
             }
@@ -8138,7 +8138,7 @@ class BodyCapturingFilterTest {
         }
 
         @Override
-        protected void bodyProduced(BodyCapturingResponse response) {
+        protected void bodyProduced(BodyCapturingResponse response, HttpServletRequest request) {
             responseTester.accept(response);
         }
     }

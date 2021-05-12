@@ -52,8 +52,8 @@ import com.github.robtimus.javax.servlet.AsyncUtils;
 
 /**
  * A filter that captures request and response bodies. When the request body is fully read, {@link #bodyRead(BodyCapturingRequest)} is called.
- * When the response is complete, {@link #bodyProduced(BodyCapturingResponse)} is called. Both methods can be overridden to perform the
- * necessary logic, for example logging the request and/or response.
+ * When the response is complete, {@link #bodyProduced(BodyCapturingResponse, HttpServletRequest)} is called. Both methods can be overridden to
+ * perform the necessary logic, for example logging the request and/or response.
  * <p>
  * This filter supports the following init parameters:
  * <blockquote>
@@ -288,7 +288,7 @@ public abstract class BodyCapturingFilter implements Filter {
             if (ensureRequestBodyConsumed) {
                 bodyCapturingRequest.consume(true);
             }
-            bodyProduced(bodyCapturingResponse);
+            bodyProduced(bodyCapturingResponse, httpRequest);
         });
     }
 
@@ -407,8 +407,9 @@ public abstract class BodyCapturingFilter implements Filter {
      * called on the response.
      *
      * @param response The response for which the capture limit is reached.
+     * @param request The request that lead to the response. This is provided to provide access to any request attributes.
      */
-    protected void limitReached(BodyCapturingResponse response) {
+    protected void limitReached(BodyCapturingResponse response, HttpServletRequest request) {
         // does nothing
     }
 
@@ -417,8 +418,9 @@ public abstract class BodyCapturingFilter implements Filter {
      * This method will be called exactly once for each response.
      *
      * @param response The response for which the body has been produced.
+     * @param request The request that lead to the response. This is provided to provide access to any request attributes.
      */
-    protected void bodyProduced(BodyCapturingResponse response) {
+    protected void bodyProduced(BodyCapturingResponse response, HttpServletRequest request) {
         // does nothing
     }
 
@@ -690,7 +692,7 @@ public abstract class BodyCapturingFilter implements Filter {
             initialCapacity = initialResponseCapacity(request);
             limit = responseLimit(request);
 
-            limitReachedCallback = () -> limitReached(this);
+            limitReachedCallback = () -> limitReached(this, request);
         }
 
         @Override

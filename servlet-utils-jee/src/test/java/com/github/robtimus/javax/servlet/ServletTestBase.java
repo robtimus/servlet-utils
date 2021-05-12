@@ -68,7 +68,9 @@ public abstract class ServletTestBase {
 
     @AfterEach
     protected void stopServer() {
-        assertDoesNotThrow(server::stop);
+        if (server != null) {
+            assertDoesNotThrow(server::stop);
+        }
     }
 
     protected String randomBody(int length) {

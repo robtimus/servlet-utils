@@ -63,6 +63,7 @@ public final class AsyncUtils {
      * @param action The action to execute after the chain ends.
      * @throws IOException Re-thrown from the call to {@link FilterChain#doFilter(ServletRequest, ServletResponse) chain.doFilter} or the action.
      * @throws ServletException Re-thrown from the call to {@link FilterChain#doFilter(ServletRequest, ServletResponse) chain.doFilter}.
+     * @throws NullPointerException If the request, response filter chain or action is {@code null}.
      */
     public static void doFilter(ServletRequest request, ServletResponse response, FilterChain chain, ServletConsumer action)
             throws IOException, ServletException {

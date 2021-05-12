@@ -31,7 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doReturn;
@@ -404,35 +403,39 @@ class BodyCapturingFilterTest {
             testFilter = new TestFilter();
         }
 
-        private void startServer(Servlet servlet) {
-            startServer(servlet, filter -> { /* do nothing */ });
+        void setInitFlag(FilterHolder filter, String name) {
+            filter.setInitParameter(name, "true");
         }
 
-        private void startServer(Servlet servlet, int limit) {
-            startServer(servlet, limit, filter -> { /* do nothing */ });
+        private void withServer(Servlet servlet, Runnable action) {
+            withServer(servlet, filter -> { /* do nothing */ }, action);
         }
 
-        private void startServer(Servlet servlet, Consumer<FilterHolder> filterConfigurer) {
-            startServer(context -> context.addServlet(new ServletHolder(servlet), "/*"), filterConfigurer);
+        private void withServer(Servlet servlet, int limit, Runnable action) {
+            withServer(servlet, limit, filter -> { /* do nothing */ }, action);
         }
 
-        private void startServer(Servlet servlet, int limit, Consumer<FilterHolder> filterConfigurer) {
+        private void withServer(Servlet servlet, Consumer<FilterHolder> filterConfigurer, Runnable action) {
+            withServer(context -> context.addServlet(new ServletHolder(servlet), "/*"), filterConfigurer, action);
+        }
+
+        private void withServer(Servlet servlet, int limit, Consumer<FilterHolder> filterConfigurer, Runnable action) {
             String limitString = Integer.toString(limit);
-            startServer(servlet, filter -> {
+            withServer(servlet, filter -> {
                 filter.setInitParameter(REQUEST_LIMIT, limitString);
                 filter.setInitParameter(RESPONSE_LIMIT, limitString);
                 filterConfigurer.accept(filter);
-            });
+            }, action);
         }
 
-        private void startServer(Consumer<ServletContextHandler> containerConfigurer, Consumer<FilterHolder> filterConfigurer) {
-            super.startServer(context -> {
+        private void withServer(Consumer<ServletContextHandler> containerConfigurer, Consumer<FilterHolder> filterConfigurer, Runnable action) {
+            super.withServer(context -> {
                 containerConfigurer.accept(context);
 
                 FilterHolder filter = new FilterHolder(testFilter);
                 filterConfigurer.accept(filter);
                 context.addFilter(filter, "/*", EnumSet.allOf(DispatcherType.class));
-            });
+            }, action);
         }
 
         private void sendGetRequest(Matcher<String> responseBodyMatcher) {
@@ -494,12 +497,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming all")
                 class ConsumingAll {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new BinaryEchoServlet(false));
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(false), action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new BinaryEchoServlet(false), filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(false), filterConfigurer, action);
                     }
 
                     @Nested
@@ -510,59 +513,47 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, false),
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
 
@@ -570,56 +561,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, false),
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
                     }
@@ -632,56 +611,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyBytes(true),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, true),
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
 
@@ -689,56 +656,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyBytes(true),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, true),
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
                     }
@@ -748,12 +703,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming up to content length")
                 class ConsumingUpToContentLength {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new BinaryEchoServlet(true));
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(true), action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new BinaryEchoServlet(true), filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(true), filterConfigurer, action);
                     }
 
                     @Nested
@@ -764,59 +719,47 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, false),
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
 
@@ -824,57 +767,45 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(
+                                        filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, false),
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
                     }
@@ -887,57 +818,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyBytes(true),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, true),
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
 
@@ -945,54 +863,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(BYTES, false));
+                                });
                             }
                         }
                     }
@@ -1009,12 +917,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming all")
                 class ConsumingAll {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new BinaryEchoServlet(false), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(false), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new BinaryEchoServlet(false), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(false), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -1025,61 +933,49 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
 
@@ -1087,58 +983,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                        new CapturedData(BYTES, limit, false),
+                                        new CapturedData(BYTES, limit, false),
+                                        new CapturedData(BYTES, limit, false),
+                                        new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
                     }
@@ -1151,58 +1035,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyBytes(true),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, true);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                        new CapturedData(BYTES, limit, true),
+                                        new CapturedData(BYTES, limit, false),
+                                        new CapturedData(BYTES, limit, false),
+                                        new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
 
@@ -1210,58 +1082,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyBytes(true),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, true);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                        new CapturedData(BYTES, limit, true),
+                                        new CapturedData(BYTES, limit, false),
+                                        new CapturedData(BYTES, limit, false),
+                                        new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
                     }
@@ -1271,12 +1131,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming up to content length")
                 class ConsumingUpToContentLength {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new BinaryEchoServlet(true), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(true), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new BinaryEchoServlet(true), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new BinaryEchoServlet(true), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -1287,61 +1147,49 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
 
@@ -1349,59 +1197,47 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(
+                                        filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
                     }
@@ -1414,59 +1250,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyBytes(true),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, true);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(BYTES, limit, true),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
 
@@ -1474,56 +1297,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyBytes(false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            CapturedData.emptyBytes(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(BYTES, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(BYTES, limit, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false),
+                                            new CapturedData(BYTES, limit, false));
+                                });
                             }
                         }
                     }
@@ -1543,12 +1356,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming all")
                 class ConsumingAll {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new TextEchoServlet(false));
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(false), action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new TextEchoServlet(false), filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(false), filterConfigurer, action);
                     }
 
                     @Nested
@@ -1559,59 +1372,47 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, false),
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
 
@@ -1619,56 +1420,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, false),
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
                     }
@@ -1681,56 +1470,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, true),
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
 
@@ -1738,56 +1515,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, true),
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
                     }
@@ -1797,12 +1562,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming up to content length")
                 class ConsumingUpToContentLength {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new TextEchoServlet(true));
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(true), action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new TextEchoServlet(true), filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(true), filterConfigurer, action);
                     }
 
                     @Nested
@@ -1813,59 +1578,47 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, false),
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
 
@@ -1873,57 +1626,45 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(
+                                        filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, false),
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
                     }
@@ -1936,57 +1677,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, true),
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
 
@@ -1994,54 +1722,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(TEXT, false));
+                                });
                             }
                         }
                     }
@@ -2058,12 +1776,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming all")
                 class ConsumingAll {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new TextEchoServlet(false), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(false), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new TextEchoServlet(false), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(false), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -2074,61 +1792,49 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
 
@@ -2136,58 +1842,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
                     }
@@ -2200,58 +1894,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, true),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
 
@@ -2259,58 +1941,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingAll.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingAll.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, true),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
                     }
@@ -2320,12 +1990,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("consuming up to content length")
                 class ConsumingUpToContentLength {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new TextEchoServlet(true), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(true), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new TextEchoServlet(true), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new TextEchoServlet(true), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -2336,61 +2006,49 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
 
@@ -2398,59 +2056,47 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(
+                                        filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
                     }
@@ -2463,59 +2109,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer(
-                                        filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, true),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
 
@@ -2523,56 +2156,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                ConsumingUpToContentLength.this.startServer();
+                            private void withServer(Runnable action) {
+                                ConsumingUpToContentLength.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(""));
 
-                                sendGetRequest(equalTo(""));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest();
 
-                                sendPostRequest();
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.emptyText(false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            CapturedData.emptyText(false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendPostRequest(TEXT);
 
-                                sendPostRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseLimitReached = new CapturedData(TEXT, limit, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertEquals(expectedCapturedDataForResponseLimitReached, testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false));
+                                });
                             }
                         }
                     }
@@ -2604,12 +2227,12 @@ class BodyCapturingFilterTest {
                     @DisplayName("using reader")
                     class UsingReader {
 
-                        private void startServer() {
-                            DoFilter.this.startServer(new ConstantServlet(true, true));
+                        private void withServer(Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, true), action);
                         }
 
-                        private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                            DoFilter.this.startServer(new ConstantServlet(true, true), filterConfigurer);
+                        private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, true), filterConfigurer, action);
                         }
 
                         @Nested
@@ -2620,59 +2243,47 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
 
@@ -2680,57 +2291,44 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
                         }
@@ -2743,56 +2341,44 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
 
@@ -2800,56 +2386,44 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer();
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
                         }
@@ -2859,12 +2433,12 @@ class BodyCapturingFilterTest {
                     @DisplayName("not using reader")
                     class NotUsingReader {
 
-                        private void startServer() {
-                            DoFilter.this.startServer(new ConstantServlet(true, false));
+                        private void withServer(Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, false), action);
                         }
 
-                        private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                            DoFilter.this.startServer(new ConstantServlet(true, false), filterConfigurer);
+                        private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, false), filterConfigurer, action);
                         }
 
                         @Nested
@@ -2875,59 +2449,47 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, false),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
 
@@ -2935,57 +2497,44 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, false),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
                         }
@@ -2998,56 +2547,44 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyBytes(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
 
@@ -3055,56 +2592,44 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer();
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyBytes(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
                             }
                         }
@@ -3115,12 +2640,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("not ensuring body consumed")
                 class NotEnsuringBodyConsumed {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new ConstantServlet(false, false));
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new ConstantServlet(false, false), action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new ConstantServlet(false, false), filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new ConstantServlet(false, false), filterConfigurer, action);
                     }
 
                     @Nested
@@ -3131,59 +2656,47 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, false),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
                         }
 
@@ -3191,56 +2704,45 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer(
-                                        filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(
+                                        filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
                         }
                     }
@@ -3253,57 +2755,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer(
-                                        filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, true),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
                         }
 
@@ -3311,54 +2800,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer();
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
                         }
                     }
@@ -3379,12 +2858,12 @@ class BodyCapturingFilterTest {
                     @DisplayName("using reader")
                     class UsingReader {
 
-                        private void startServer() {
-                            DoFilter.this.startServer(new ConstantServlet(true, true), limit);
+                        private void withServer(Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, true), limit, action);
                         }
 
-                        private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                            DoFilter.this.startServer(new ConstantServlet(true, true), limit, filterConfigurer);
+                        private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, true), limit, filterConfigurer, action);
                         }
 
                         @Nested
@@ -3395,60 +2874,49 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -3456,58 +2924,46 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -3520,57 +2976,46 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -3578,57 +3023,46 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReader.this.startServer();
+                                private void withServer(Runnable action) {
+                                    UsingReader.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -3638,12 +3072,12 @@ class BodyCapturingFilterTest {
                     @DisplayName("not using reader")
                     class NotUsingReader {
 
-                        private void startServer() {
-                            DoFilter.this.startServer(new ConstantServlet(true, false), limit);
+                        private void withServer(Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, false), limit, action);
                         }
 
-                        private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                            DoFilter.this.startServer(new ConstantServlet(true, false), limit, filterConfigurer);
+                        private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                            DoFilter.this.withServer(new ConstantServlet(true, false), limit, filterConfigurer, action);
                         }
 
                         @Nested
@@ -3654,60 +3088,49 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, limit, false),
+                                                new CapturedData(BYTES, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -3715,58 +3138,46 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, limit, false),
+                                                new CapturedData(BYTES, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -3779,57 +3190,46 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyBytes(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, limit, true),
+                                                new CapturedData(BYTES, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -3837,57 +3237,46 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingReader.this.startServer();
+                                private void withServer(Runnable action) {
+                                    NotUsingReader.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with no body")
                                 void testWithNoBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyBytes(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyBytes(true),
+                                                new CapturedData(ConstantServlet.TEXT, false));
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(BYTES, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(BYTES, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(BYTES, limit, true),
+                                                new CapturedData(BYTES, limit, false),
+                                                new CapturedData(ConstantServlet.TEXT, false),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -3898,12 +3287,12 @@ class BodyCapturingFilterTest {
                 @DisplayName("not ensuring body consumed")
                 class NotEnsuringBodyConsumed {
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new ConstantServlet(false, false), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new ConstantServlet(false, false), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new ConstantServlet(false, false), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new ConstantServlet(false, false), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -3914,60 +3303,49 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer(filter -> {
-                                    filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                    filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                });
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(filter -> {
+                                    setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                    setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                }, action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(ConstantServlet.TEXT, false),
+                                            null);
+                                });
                             }
                         }
 
@@ -3975,56 +3353,45 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer(
-                                        filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(
+                                        filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
                         }
                     }
@@ -4037,58 +3404,46 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed set")
                         class WithEnsureRequestBodyConsumedSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer(
-                                        filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.emptyText(true),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            new CapturedData(TEXT, limit, true),
+                                            new CapturedData(TEXT, limit, false),
+                                            new CapturedData(ConstantServlet.TEXT, false),
+                                            null);
+                                });
                             }
                         }
 
@@ -4096,54 +3451,44 @@ class BodyCapturingFilterTest {
                         @DisplayName("with ensureRequestBodyConsumed not set")
                         class WithEnsureRequestBodyConsumedNotSet {
 
-                            private void startServer() {
-                                NotEnsuringBodyConsumed.this.startServer();
+                            private void withServer(Runnable action) {
+                                NotEnsuringBodyConsumed.this.withServer(action);
                             }
 
                             @Test
                             @DisplayName("with no body")
                             void testWithNoBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendGetRequest(equalTo(ConstantServlet.TEXT));
 
-                                sendGetRequest(equalTo(ConstantServlet.TEXT));
-
-                                CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            CapturedData.none(),
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with empty body")
                             void testWithEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest();
 
-                                sendRequest();
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
 
                             @Test
                             @DisplayName("with non-empty body")
                             void testWithNonEmptyBody() {
-                                startServer();
+                                withServer(() -> {
+                                    sendRequest(TEXT);
 
-                                sendRequest(TEXT);
-
-                                CapturedData expectedCapturedDataForResponseBodyProduced = new CapturedData(ConstantServlet.TEXT, false);
-
-                                assertNull(testFilter.capturedDataForRequestBodyRead.get());
-                                assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                    testFilter.assertCapturedData(
+                                            null,
+                                            new CapturedData(ConstantServlet.TEXT, false));
+                                });
                             }
                         }
                     }
@@ -4167,12 +3512,12 @@ class BodyCapturingFilterTest {
             @DisplayName("not using reset() or resetBuffer()")
             class NotUsingResetOrResetBuffer {
 
-                private void startServer() {
-                    DoFilter.this.startServer(new OnlyConsumingServlet(false, false));
+                private void withServer(Runnable action) {
+                    DoFilter.this.withServer(new OnlyConsumingServlet(false, false), action);
                 }
 
-                private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                    DoFilter.this.startServer(new OnlyConsumingServlet(false, false), filterConfigurer);
+                private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                    DoFilter.this.withServer(new OnlyConsumingServlet(false, false), filterConfigurer, action);
                 }
 
                 @Nested
@@ -4191,43 +3536,35 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -4235,41 +3572,33 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(
+                                            filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -4282,41 +3611,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer(
-                                            filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -4324,40 +3644,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer();
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -4375,43 +3687,35 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -4419,41 +3723,33 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(
+                                            filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -4466,41 +3762,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer(
-                                            filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -4508,40 +3795,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    NotUsingResetOrResetBuffer.this.startServer();
+                                private void withServer(Runnable action) {
+                                    NotUsingResetOrResetBuffer.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -4554,12 +3833,12 @@ class BodyCapturingFilterTest {
 
                     private int limit = TEXT.length() / 2;
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new OnlyConsumingServlet(false, false), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new OnlyConsumingServlet(false, false), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new OnlyConsumingServlet(false, false), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new OnlyConsumingServlet(false, false), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -4574,44 +3853,37 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -4619,41 +3891,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -4666,41 +3931,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -4708,41 +3966,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer();
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -4760,44 +4011,37 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -4805,41 +4049,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -4852,41 +4089,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -4894,41 +4124,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer();
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -4940,12 +4163,12 @@ class BodyCapturingFilterTest {
             @DisplayName("using resetBuffer()")
             class UsingResetBuffer {
 
-                private void startServer() {
-                    DoFilter.this.startServer(new OnlyConsumingServlet(false, true));
+                private void withServer(Runnable action) {
+                    DoFilter.this.withServer(new OnlyConsumingServlet(false, true), action);
                 }
 
-                private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                    DoFilter.this.startServer(new OnlyConsumingServlet(false, true), filterConfigurer);
+                private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                    DoFilter.this.withServer(new OnlyConsumingServlet(false, true), filterConfigurer, action);
                 }
 
                 @Nested
@@ -4964,43 +4187,35 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -5008,41 +4223,33 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(
+                                            filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -5055,40 +4262,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -5096,40 +4295,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer();
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -5147,43 +4338,35 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -5191,41 +4374,33 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(
+                                            filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -5238,40 +4413,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -5279,40 +4446,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingResetBuffer.this.startServer();
+                                private void withServer(Runnable action) {
+                                    UsingResetBuffer.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -5325,12 +4484,12 @@ class BodyCapturingFilterTest {
 
                     private int limit = TEXT.length() / 2;
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new OnlyConsumingServlet(false, true), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new OnlyConsumingServlet(false, true), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new OnlyConsumingServlet(false, true), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new OnlyConsumingServlet(false, true), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -5345,44 +4504,37 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -5390,41 +4542,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -5437,41 +4582,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -5479,41 +4617,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer();
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -5531,44 +4662,37 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -5576,41 +4700,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -5623,41 +4740,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -5665,41 +4775,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer();
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -5711,12 +4814,12 @@ class BodyCapturingFilterTest {
             @DisplayName("using reset()")
             class UsingReset {
 
-                private void startServer() {
-                    DoFilter.this.startServer(new OnlyConsumingServlet(true, false));
+                private void withServer(Runnable action) {
+                    DoFilter.this.withServer(new OnlyConsumingServlet(true, false), action);
                 }
 
-                private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                    DoFilter.this.startServer(new OnlyConsumingServlet(true, false), filterConfigurer);
+                private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                    DoFilter.this.withServer(new OnlyConsumingServlet(true, false), filterConfigurer, action);
                 }
 
                 @Nested
@@ -5735,43 +4838,35 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -5779,41 +4874,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -5826,40 +4912,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -5867,40 +4945,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer();
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -5918,43 +4988,35 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -5962,41 +5024,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer(
-                                            filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, false),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -6009,40 +5062,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
 
@@ -6050,40 +5095,32 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    UsingReset.this.startServer();
+                                private void withServer(Runnable action) {
+                                    UsingReset.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, true),
+                                                CapturedData.none());
+                                    });
                                 }
                             }
                         }
@@ -6096,12 +5133,12 @@ class BodyCapturingFilterTest {
 
                     private int limit = TEXT.length() / 2;
 
-                    private void startServer() {
-                        DoFilter.this.startServer(new OnlyConsumingServlet(true, false), limit);
+                    private void withServer(Runnable action) {
+                        DoFilter.this.withServer(new OnlyConsumingServlet(true, false), limit, action);
                     }
 
-                    private void startServer(Consumer<FilterHolder> filterConfigurer) {
-                        DoFilter.this.startServer(new OnlyConsumingServlet(true, false), limit, filterConfigurer);
+                    private void withServer(Consumer<FilterHolder> filterConfigurer, Runnable action) {
+                        DoFilter.this.withServer(new OnlyConsumingServlet(true, false), limit, filterConfigurer, action);
                     }
 
                     @Nested
@@ -6116,44 +5153,37 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -6161,41 +5191,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -6208,41 +5231,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -6250,41 +5266,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer();
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -6302,44 +5311,37 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> {
-                                        filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true");
-                                        filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true");
-                                    });
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> {
+                                        setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH);
+                                        setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED);
+                                    }, action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -6347,41 +5349,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.none();
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.none(),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, false),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -6394,41 +5389,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed set")
                             class WithEnsureRequestBodyConsumedSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer(filter -> filter.setInitParameter(ENSURE_REQUEST_BODY_CONSUMED, "true"));
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(filter -> setInitFlag(filter, ENSURE_REQUEST_BODY_CONSUMED), action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
 
@@ -6436,41 +5424,34 @@ class BodyCapturingFilterTest {
                             @DisplayName("with ensureRequestBodyConsumed not set")
                             class WithEnsureRequestBodyConsumedNotSet {
 
-                                private void startServer() {
-                                    Limited.this.startServer();
+                                private void withServer(Runnable action) {
+                                    Limited.this.withServer(action);
                                 }
 
                                 @Test
                                 @DisplayName("with empty body")
                                 void testWithEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest();
 
-                                    sendRequest();
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = CapturedData.emptyText(true);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertNull(testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                CapturedData.emptyText(true),
+                                                CapturedData.none());
+                                    });
                                 }
 
                                 @Test
                                 @DisplayName("with non-empty body")
                                 void testWithNonEmptyBody() {
-                                    startServer();
+                                    withServer(() -> {
+                                        sendRequest(TEXT);
 
-                                    sendRequest(TEXT);
-
-                                    CapturedData expectedCapturedDataForRequestBodyRead = new CapturedData(TEXT, limit, true);
-                                    CapturedData expectedCapturedDataForRequestLimitReached = new CapturedData(TEXT, limit, false);
-                                    CapturedData expectedCapturedDataForResponseBodyProduced = CapturedData.none();
-
-                                    assertEquals(expectedCapturedDataForRequestBodyRead, testFilter.capturedDataForRequestBodyRead.get());
-                                    assertEquals(expectedCapturedDataForRequestLimitReached, testFilter.capturedDataForRequestLimitReached.get());
-                                    assertEquals(expectedCapturedDataForResponseBodyProduced, testFilter.capturedDataForResponseBodyProduced.get());
-                                    assertNull(testFilter.capturedDataForResponseLimitReached.get());
+                                        testFilter.assertCapturedData(
+                                                new CapturedData(TEXT, limit, true),
+                                                new CapturedData(TEXT, limit, false),
+                                                CapturedData.none(),
+                                                null);
+                                    });
                                 }
                             }
                         }
@@ -6486,7 +5467,7 @@ class BodyCapturingFilterTest {
             @Test
             @DisplayName("capturedTextBody for binary capture")
             void testCapturedTextBodyForBinaryCapture() {
-                DoFilter.super.startServer(context -> {
+                DoFilter.super.withServer(context -> {
                     ServletHolder servlet = new ServletHolder(new BinaryEchoServlet(false));
                     context.addServlet(servlet, "/*");
 
@@ -6494,15 +5475,13 @@ class BodyCapturingFilterTest {
                             request -> assertThrows(IllegalStateException.class, request::capturedTextBody),
                             response -> assertThrows(IllegalStateException.class, response::capturedTextBody)));
                     context.addFilter(filter, "/*", EnumSet.allOf(DispatcherType.class));
-                });
-
-                sendPostRequest(TEXT);
+                }, () -> sendPostRequest(TEXT));
             }
 
             @Test
             @DisplayName("capturedBinaryBody for text capture")
             void testCapturedBinaryBodyForTextCapture() {
-                DoFilter.super.startServer(context -> {
+                DoFilter.super.withServer(context -> {
                     ServletHolder servlet = new ServletHolder(new TextEchoServlet(false));
                     context.addServlet(servlet, "/*");
 
@@ -6510,15 +5489,13 @@ class BodyCapturingFilterTest {
                             request -> assertThrows(IllegalStateException.class, request::capturedBinaryBody),
                             response -> assertThrows(IllegalStateException.class, response::capturedBinaryBody)));
                     context.addFilter(filter, "/*", EnumSet.allOf(DispatcherType.class));
-                });
-
-                sendPostRequest(TEXT);
+                }, () -> sendPostRequest(TEXT));
             }
 
             @Test
             @DisplayName("capturedBinaryBodyAsString for text capture")
             void testCapturedBinaryBodyAsStringForTextCapture() {
-                DoFilter.super.startServer(context -> {
+                DoFilter.super.withServer(context -> {
                     ServletHolder servlet = new ServletHolder(new TextEchoServlet(false));
                     context.addServlet(servlet, "/*");
 
@@ -6526,9 +5503,7 @@ class BodyCapturingFilterTest {
                             request -> assertThrows(IllegalStateException.class, request::capturedBinaryBodyAsString),
                             response -> assertThrows(IllegalStateException.class, response::capturedBinaryBodyAsString)));
                     context.addFilter(filter, "/*", EnumSet.allOf(DispatcherType.class));
-                });
-
-                sendPostRequest(TEXT);
+                }, () -> sendPostRequest(TEXT));
             }
         }
     }
@@ -8119,6 +7094,25 @@ class BodyCapturingFilterTest {
             if (!capturedDataForResponseLimitReached.compareAndSet(null, new CapturedData(response))) {
                 throw new IllegalStateException("limitReached should only be called once per response");
             }
+        }
+
+        private void assertCapturedData(
+                CapturedData expectedCapturedDataForRequestBodyRead,
+                CapturedData expectedCapturedDataForResponseBodyProduced) {
+
+            assertCapturedData(expectedCapturedDataForRequestBodyRead, null, expectedCapturedDataForResponseBodyProduced, null);
+        }
+
+        private void assertCapturedData(
+                CapturedData expectedCapturedDataForRequestBodyRead,
+                CapturedData expectedCapturedDataForRequestLimitReached,
+                CapturedData expectedCapturedDataForResponseBodyProduced,
+                CapturedData expectedCapturedDataForResponseLimitReached) {
+
+            assertEquals(expectedCapturedDataForRequestBodyRead, capturedDataForRequestBodyRead.get());
+            assertEquals(expectedCapturedDataForRequestLimitReached, capturedDataForRequestLimitReached.get());
+            assertEquals(expectedCapturedDataForResponseBodyProduced, capturedDataForResponseBodyProduced.get());
+            assertEquals(expectedCapturedDataForResponseLimitReached, capturedDataForResponseLimitReached.get());
         }
     }
 

@@ -59,7 +59,7 @@ class HttpServletUtilsTest extends ServletTestBase {
     void testForEachHeader() {
         CaptureHeaderFilter captureHeaderFilter = new CaptureHeaderFilter();
 
-        startServer(context -> {
+        withServer(context -> {
             FilterHolder filter = new FilterHolder(captureHeaderFilter);
             context.addFilter(filter, "/*", EnumSet.allOf(DispatcherType.class));
 
@@ -78,29 +78,29 @@ class HttpServletUtilsTest extends ServletTestBase {
                 }
             });
             context.addServlet(servlet, "/*");
+        }, () -> {
+            withClientRequest(request -> {
+                ContentResponse response = assertDoesNotThrow(() -> request
+                        .method(HttpMethod.POST)
+                        .path("/")
+                        .header("x-custom", "1")
+                        .header("x-custom", "2")
+                        .content(new StringContentProvider("text/plain", "Hello world", StandardCharsets.UTF_8))
+                        .send());
+
+                assertEquals(200, response.getStatus());
+            });
+
+            assertThat(captureHeaderFilter.requestHeaders, hasEntry(equalToIgnoringCase("Content-Type"), contains("text/plain")));
+            assertThat(captureHeaderFilter.requestHeaders, hasEntry(equalToIgnoringCase("Content-Length"), contains("11")));
+            assertThat(captureHeaderFilter.requestHeaders, hasEntry(equalTo("x-custom"), contains("1", "2")));
+            assertThat(captureHeaderFilter.requestHeaders, hasKey(equalToIgnoringCase("User-Agent")));
+
+            assertThat(captureHeaderFilter.responseHeaders, hasEntry(equalToIgnoringCase("Content-Type"), contains(startsWith("text/plain"))));
+            assertThat(captureHeaderFilter.responseHeaders, hasEntry(equalToIgnoringCase("Content-Length"), contains("11")));
+            assertThat(captureHeaderFilter.responseHeaders, hasEntry(equalTo("x-custom"), contains("3", "4")));
+            assertThat(captureHeaderFilter.responseHeaders, hasKey(equalToIgnoringCase("Date")));
         });
-
-        withClientRequest(request -> {
-            ContentResponse response = assertDoesNotThrow(() -> request
-                    .method(HttpMethod.POST)
-                    .path("/")
-                    .header("x-custom", "1")
-                    .header("x-custom", "2")
-                    .content(new StringContentProvider("text/plain", "Hello world", StandardCharsets.UTF_8))
-                    .send());
-
-            assertEquals(200, response.getStatus());
-        });
-
-        assertThat(captureHeaderFilter.requestHeaders, hasEntry(equalToIgnoringCase("Content-Type"), contains("text/plain")));
-        assertThat(captureHeaderFilter.requestHeaders, hasEntry(equalToIgnoringCase("Content-Length"), contains("11")));
-        assertThat(captureHeaderFilter.requestHeaders, hasEntry(equalTo("x-custom"), contains("1", "2")));
-        assertThat(captureHeaderFilter.requestHeaders, hasKey(equalToIgnoringCase("User-Agent")));
-
-        assertThat(captureHeaderFilter.responseHeaders, hasEntry(equalToIgnoringCase("Content-Type"), contains(startsWith("text/plain"))));
-        assertThat(captureHeaderFilter.responseHeaders, hasEntry(equalToIgnoringCase("Content-Length"), contains("11")));
-        assertThat(captureHeaderFilter.responseHeaders, hasEntry(equalTo("x-custom"), contains("3", "4")));
-        assertThat(captureHeaderFilter.responseHeaders, hasKey(equalToIgnoringCase("Date")));
     }
 
     private static final class CaptureHeaderFilter implements Filter {

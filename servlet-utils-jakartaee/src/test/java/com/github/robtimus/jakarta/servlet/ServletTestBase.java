@@ -27,7 +27,6 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
-import org.junit.jupiter.api.AfterEach;
 
 @SuppressWarnings({ "nls", "javadoc" })
 public abstract class ServletTestBase {
@@ -37,7 +36,16 @@ public abstract class ServletTestBase {
     private Server server;
     private ServerConnector serverConnector;
 
-    protected void startServer(Consumer<ServletContextHandler> containerConfigurer) {
+    protected void withServer(Consumer<ServletContextHandler> containerConfigurer, Runnable action) {
+        startServer(containerConfigurer);
+        try {
+            action.run();
+        } finally {
+            stopServer();
+        }
+    }
+
+    private void startServer(Consumer<ServletContextHandler> containerConfigurer) {
         QueuedThreadPool pool = new QueuedThreadPool();
         pool.setName("server");
         server = new Server(pool);
@@ -49,6 +57,10 @@ public abstract class ServletTestBase {
         containerConfigurer.accept(servletContext);
 
         assertDoesNotThrow(server::start);
+    }
+
+    private void stopServer() {
+        assertDoesNotThrow(server::stop);
     }
 
     protected void withClientRequest(Consumer<Request> action) {
@@ -63,13 +75,6 @@ public abstract class ServletTestBase {
             action.accept(request);
         } finally {
             assertDoesNotThrow(client::stop);
-        }
-    }
-
-    @AfterEach
-    protected void stopServer() {
-        if (server != null) {
-            assertDoesNotThrow(server::stop);
         }
     }
 

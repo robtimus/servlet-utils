@@ -55,10 +55,10 @@ import com.github.robtimus.javax.servlet.AsyncUtils;
  * When the response is complete, {@link #bodyProduced(BodyCapturingResponse, HttpServletRequest)} is called. Both methods can be overridden to
  * perform the necessary logic, for example logging the request and/or response.
  * <p>
- * This filter supports the following init parameters:
+ * This filter supports the following initialization parameters:
  * <blockquote>
  * <table class="striped">
- *   <caption style="display:none">Supported init parameters</caption>
+ *   <caption style="display:none">Supported initialization parameters</caption>
  *   <thead>
  *     <tr>
  *       <th>Name</th>
@@ -78,7 +78,7 @@ import com.github.robtimus.javax.servlet.AsyncUtils;
  *       <td>initialRequestCapacityFromContentLength</td>
  *       <td>boolean</td>
  *       <td>{@code true} to use the request's content length for the initial capacity.
- *           If {@code true}, the {@code initialRequestCapacity} init parameter is ignored.</td>
+ *           If {@code true}, the {@code initialRequestCapacity} initialization parameter is ignored.</td>
  *       <td>{@code false}</td>
  *     </tr>
  *     <tr>
@@ -124,7 +124,8 @@ import com.github.robtimus.javax.servlet.AsyncUtils;
  * </blockquote>
  * With these settings, there are two cases where the request body is not read, but {@link #bodyRead(BodyCapturingRequest)} is called immediately:
  * <ul>
- * <li>The {@code considerRequestReadAfterContentLength} init parameter is set to {@code true} and the request as a {@code 0} content length.</li>
+ * <li>The {@code considerRequestReadAfterContentLength} initialization parameter is set to {@code true} and the request as a {@code 0} content
+ *     length.</li>
  * <li>{@link #hasNoBody(String)} returns {@code true} for the request's method. By default this is the case for {@code GET}, {@code DELETE},
  *     {@code OPTIONS} and {@code HEAD}.</li>
  * </ul>
@@ -393,7 +394,7 @@ public abstract class BodyCapturingFilter implements Filter {
      * {@link BodyCapturingRequest#bodyIsConsumed() consumed}, or if its {@link ServletRequest#getInputStream() input stream} or
      * {@link ServletRequest#getReader() reader} is closed.
      * This method will be called at most once for each request. If all downstream filters and servlets fail to (completely) consume the request,
-     * this method will only be called if init parameter {@code ensureRequestBodyConsumed} is set to {@code true}.
+     * this method will only be called if initialization parameter {@code ensureRequestBodyConsumed} is set to {@code true}.
      *
      * @param request The request for which the body has been read.
      */
@@ -426,9 +427,9 @@ public abstract class BodyCapturingFilter implements Filter {
 
     /**
      * Returns the initial capacity for the buffer used for capturing a request's body.
-     * This implementation will return the given request's content length if the {@code initialRequestCapacityFromContentLength} init parameter is
-     * set to {@code true} and the request has a content length defined. Otherwise it will return the value of the {@code initialRequestCapacity} init
-     * parameter. If that's not given, {@code 32} will be used.
+     * This implementation will return the given request's content length if the {@code initialRequestCapacityFromContentLength} initialization
+     * parameter is set to {@code true} and the request has a content length defined. Otherwise it will return the value of the
+     * {@code initialRequestCapacity} initialization parameter. If that's not given, {@code 32} will be used.
      * <p>
      * This method can be overridden to return something else depending on the request, for example based on the content type.
      *
@@ -447,7 +448,7 @@ public abstract class BodyCapturingFilter implements Filter {
 
     /**
      * Returns the limit for the number of bytes or characters of a request's body to capture.
-     * This implementation will return the value of the {@code requestLimit} init parameter.
+     * This implementation will return the value of the {@code requestLimit} initialization parameter.
      * <p>
      * This method can be overridden to return something else depending on the request, for example based on the content type.
      *
@@ -460,7 +461,8 @@ public abstract class BodyCapturingFilter implements Filter {
 
     /**
      * Returns the initial capacity for the buffer used for capturing a response's body.
-     * This implementation will return the value of the {@code initialResponseCapacity} init parameter. If that's not given, {@code 32} will be used.
+     * This implementation will return the value of the {@code initialResponseCapacity} initialization parameter. If that's not given, {@code 32} will
+     * be used.
      * <p>
      * This method can be overridden to return something else depending on the request, for example based on the path. Since this method is called
      * before the response is populated, the response cannot be used and is therefore not provided.
@@ -474,7 +476,7 @@ public abstract class BodyCapturingFilter implements Filter {
 
     /**
      * Returns the limit for the number of bytes or characters of a response's body to capture.
-     * This implementation will return the value of the {@code responseLimit} init parameter.
+     * This implementation will return the value of the {@code responseLimit} initialization parameter.
      * <p>
      * This method can be overridden to return something else depending on the request, for example based on the path. Since this method is called
      * before the response is populated, the response cannot be used and is therefore not provided.

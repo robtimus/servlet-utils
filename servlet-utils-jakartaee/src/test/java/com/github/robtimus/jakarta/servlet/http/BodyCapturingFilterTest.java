@@ -37,6 +37,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import java.io.BufferedReader;
@@ -5602,7 +5603,7 @@ class BodyCapturingFilterTest {
             @Test
             @DisplayName("with direct BodyCapturingRequest")
             void testWithDirectBodyCapturingRequest() throws IOException {
-                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request, false);
+                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request);
 
                 BodyCapturingFilter.ensureBodyConsumed(bodyCapturingRequest, true);
 
@@ -5613,7 +5614,7 @@ class BodyCapturingFilterTest {
             @Test
             @DisplayName("with nested BodyCapturingRequest")
             void testWithNestedBodyCapturingRequest() throws IOException {
-                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request, false);
+                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request);
 
                 HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(bodyCapturingRequest));
 
@@ -5623,35 +5624,14 @@ class BodyCapturingFilterTest {
                 assertEquals(-1, reader.read());
             }
 
-            @Nested
+            @Test
             @DisplayName("with non-BodyCapturingRequest")
-            class WithNonBodyCapturingRequest {
+            void testWithNonBodyCapturingRequest() throws IOException {
+                HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(request));
 
-                @Test
-                @DisplayName("getInputStream() not yet called")
-                void testGetInputStreamNotYetCalled() throws IOException {
-                    HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(request));
+                BodyCapturingFilter.ensureBodyConsumed(wrapper, true);
 
-                    BodyCapturingFilter.ensureBodyConsumed(wrapper, true);
-
-                    assertEquals(-1, reader.read());
-                }
-
-                @Test
-                @DisplayName("getInputStream() already called")
-                @SuppressWarnings("resource")
-                void testGetInputStreamAlreadyCalled() throws IOException {
-                    ByteArrayInputStream inputStream = new ByteArrayInputStream(BYTES);
-
-                    doThrow(IllegalStateException.class).when(request).getReader();
-                    doReturn(ServletUtils.transform(mock(ServletInputStream.class), i -> inputStream)).when(request).getInputStream();
-
-                    HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(request));
-
-                    BodyCapturingFilter.ensureBodyConsumed(wrapper, true);
-
-                    assertEquals(-1, inputStream.read());
-                }
+                verifyNoInteractions(request);
             }
         }
 
@@ -5675,7 +5655,7 @@ class BodyCapturingFilterTest {
             @Test
             @DisplayName("with direct BodyCapturingRequest")
             void testWithDirectBodyCapturingRequest() throws IOException {
-                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request, false);
+                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request);
 
                 BodyCapturingFilter.ensureBodyConsumed(bodyCapturingRequest, false);
 
@@ -5686,7 +5666,7 @@ class BodyCapturingFilterTest {
             @Test
             @DisplayName("with nested BodyCapturingRequest")
             void testWithNestedBodyCapturingRequest() throws IOException {
-                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request, false);
+                BodyCapturingRequest bodyCapturingRequest = filter.new BodyCapturingRequest(request);
 
                 HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(bodyCapturingRequest));
 
@@ -5696,35 +5676,14 @@ class BodyCapturingFilterTest {
                 assertEquals(-1, inputStream.read());
             }
 
-            @Nested
+            @Test
             @DisplayName("with non-BodyCapturingRequest")
-            class WithNonBodyCapturingRequest {
+            void testWithNonBodyCapturingRequest() throws IOException {
+                HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(request));
 
-                @Test
-                @DisplayName("getReader() not yet called")
-                void testGetReaderNotYetCalled() throws IOException {
-                    HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(request));
+                BodyCapturingFilter.ensureBodyConsumed(wrapper, false);
 
-                    BodyCapturingFilter.ensureBodyConsumed(wrapper, false);
-
-                    assertEquals(-1, inputStream.read());
-                }
-
-                @Test
-                @DisplayName("getReader() already called")
-                @SuppressWarnings("resource")
-                void testGetReaderAlreadyCalled() throws IOException {
-                    BufferedReader reader = new BufferedReader(new StringReader(TEXT));
-
-                    doThrow(IllegalStateException.class).when(request).getInputStream();
-                    doReturn(reader).when(request).getReader();
-
-                    HttpServletRequest wrapper = new HttpServletRequestWrapper(new HttpServletRequestWrapper(request));
-
-                    BodyCapturingFilter.ensureBodyConsumed(wrapper, false);
-
-                    assertEquals(-1, reader.read());
-                }
+                verifyNoInteractions(request);
             }
         }
     }
@@ -7069,28 +7028,28 @@ class BodyCapturingFilterTest {
         private final AtomicReference<CapturedData> capturedDataForResponseLimitReached = new AtomicReference<>();
 
         @Override
-        protected void bodyRead(BodyCapturingRequest request) {
+        protected void onBodyCaptured(BodyCapturingRequest request) {
             if (!capturedDataForRequestBodyRead.compareAndSet(null, new CapturedData(request))) {
                 throw new IllegalStateException("bodyRead should only be called once per request");
             }
         }
 
         @Override
-        protected void limitReached(BodyCapturingRequest request) {
+        protected void onLimitReached(BodyCapturingRequest request) {
             if (!capturedDataForRequestLimitReached.compareAndSet(null, new CapturedData(request))) {
                 throw new IllegalStateException("limitReached should only be called once per request");
             }
         }
 
         @Override
-        protected void bodyProduced(BodyCapturingResponse response, HttpServletRequest request) {
+        protected void onBodyCaptured(BodyCapturingResponse response, HttpServletRequest request) {
             if (!capturedDataForResponseBodyProduced.compareAndSet(null, new CapturedData(response))) {
                 throw new IllegalStateException("bodyProduced should only be called once per response");
             }
         }
 
         @Override
-        protected void limitReached(BodyCapturingResponse response, HttpServletRequest request) {
+        protected void onLimitReached(BodyCapturingResponse response, HttpServletRequest request) {
             if (!capturedDataForResponseLimitReached.compareAndSet(null, new CapturedData(response))) {
                 throw new IllegalStateException("limitReached should only be called once per response");
             }
@@ -7127,12 +7086,12 @@ class BodyCapturingFilterTest {
         }
 
         @Override
-        protected void bodyRead(BodyCapturingRequest request) {
+        protected void onBodyCaptured(BodyCapturingRequest request) {
             requestTester.accept(request);
         }
 
         @Override
-        protected void bodyProduced(BodyCapturingResponse response, HttpServletRequest request) {
+        protected void onBodyCaptured(BodyCapturingResponse response, HttpServletRequest request) {
             responseTester.accept(response);
         }
     }

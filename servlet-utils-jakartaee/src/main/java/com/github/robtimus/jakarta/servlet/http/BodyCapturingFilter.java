@@ -48,84 +48,101 @@ import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * A filter that captures request and response bodies. When the request body is fully read, {@link #bodyRead(BodyCapturingRequest)} is called.
- * When the response is complete, {@link #bodyProduced(BodyCapturingResponse, HttpServletRequest)} is called. Both methods can be overridden to
+ * A filter that captures request and response bodies. When the request body is fully read, {@link #onBodyCaptured(BodyCapturingRequest)} is called.
+ * When the response is complete, {@link #onBodyCaptured(BodyCapturingResponse, HttpServletRequest)} is called. Both methods can be overridden to
  * perform the necessary logic, for example logging the request and/or response.
  * <p>
- * This filter supports the following initialization parameters:
+ * If the request body is not fully read, by default {@link #onBodyCaptured(BodyCapturingRequest)} is never called. This can be the case if none of
+ * the downstream filters and servlets fully consumes the request's body. This is the default setting for some frameworks. For instance, some JSON
+ * parsers stop reading as soon as the root object's closing curly brace is encountered. Ideally the framework should be configured to consume all
+ * content (for custom filters and servlets {@link #ensureBodyConsumed(HttpServletRequest, boolean)} is available).
+ * If that's not possible, the following initialization parameters are available to attempt to ensure {@link #onBodyCaptured(BodyCapturingRequest)} is
+ * still called:
  * <blockquote>
- * <table class="striped">
+ * <table border="0" cellspacing="3" cellpadding="0">
  *   <caption style="display:none">Supported initialization parameters</caption>
  *   <thead>
  *     <tr>
- *       <th>Name</th>
- *       <th>Type</th>
- *       <th>Description</th>
- *       <th>Default</th>
+ *       <th class="colFirst">Name</th>
+ *       <th class="colOne">Type</th>
+ *       <th class="colOne">Description</th>
+ *       <th class="colLast">Default</th>
  *     </tr>
  *   </thead>
  *   <tbody>
- *     <tr>
- *       <td>initialRequestCapacity</td>
- *       <td>int</td>
- *       <td>The initial capacity for the buffer used for capturing a request's body; not negative.</td>
- *       <td>{@code 32}</td>
+ *     <tr class="altColor">
+ *       <td class="colFirst">considerRequestReadAfterContentLength</td>
+ *       <td class="colOne">boolean</td>
+ *       <td class="colOne">{@code true} to consider the request body as fully read once the number of bytes or characters specified in the
+ *                          {@code Content-Length} header has been reached.</td>
+ *       <td class="colLast">{@code false}</td>
  *     </tr>
- *     <tr>
- *       <td>initialRequestCapacityFromContentLength</td>
- *       <td>boolean</td>
- *       <td>{@code true} to use the request's content length for the initial capacity.
- *           If {@code true}, the {@code initialRequestCapacity} initialization parameter is ignored.</td>
- *       <td>{@code false}</td>
- *     </tr>
- *     <tr>
- *       <td>requestLimit</td>
- *       <td>int</td>
- *       <td>The limit for the number of bytes or characters of a request's body to capture; not negative.</td>
- *       <td>{@link Integer#MAX_VALUE}</td>
- *     </tr>
- *     <tr>
- *       <td>considerRequestReadAfterContentLength</td>
- *       <td>boolean</td>
- *       <td>{@code true} to consider the request body as fully read once the number of bytes or characters specified in the {@code Content-Length}
- *           header has been reached.
- *           <p>
- *           Some frameworks don't fully consume all content. Instead they stop at a specific point. For instance, some JSON parsers stop reading as
- *           soon as the root object's closing closing curly brace is encountered. Ideally such a framework is configured to consume all content.
- *           This parameter can be set to {@code true} as fallback if that's not possible.</td>
- *       <td>{@code false}</td>
- *     </tr>
- *     <tr>
- *       <td>ensureRequestBodyConsumed</td>
- *       <td>boolean</td>
- *       <td>{@code true} to ensure that the request body is consumed.
- *           <p>
- *           If a downstream filter or servlet fails to consume the request's body completely, {@link #bodyRead(BodyCapturingRequest)} may never be
- *           called. This parameter can be set to {@code true} to ensure the method will be called.</td>
- *       <td>{@code false}</td>
- *     </tr>
- *     <tr>
- *       <td>initialResponseCapacity</td>
- *       <td>int</td>
- *       <td>The initial capacity for the buffer used for capturing a response's body; not negative.</td>
- *       <td>{@code 32}</td>
- *     </tr>
- *     <tr>
- *       <td>responseLimit</td>
- *       <td>int</td>
- *       <td>The limit for the number of bytes or characters of a response's body to capture; not negative.</td>
- *       <td>{@link Integer#MAX_VALUE}</td>
+ *     <tr class="rowColor">
+ *       <td class="colFirst">ensureRequestBodyConsumed</td>
+ *       <td class="colOne">boolean</td>
+ *       <td class="colOne">{@code true} to ensure that the request body is consumed. This is be done <em>after</em> the response has been completed.
+ *                          This means that if the request body has not been consumed already, {@link #onBodyCaptured(BodyCapturingRequest)} will be
+ *                          called just before {@link #onBodyCaptured(BodyCapturingResponse, HttpServletRequest)} is called.</td>
+ *       <td class="colLast">{@code false}</td>
  *     </tr>
  *   </tbody>
  * </table>
  * </blockquote>
- * With these settings, there are two cases where the request body is not read, but {@link #bodyRead(BodyCapturingRequest)} is called immediately:
- * <ul>
- * <li>The {@code considerRequestReadAfterContentLength} initialization parameter is set to {@code true} and the request as a {@code 0} content
- *     length.</li>
- * <li>{@link #hasNoBody(String)} returns {@code true} for the request's method. By default this is the case for {@code GET}, {@code DELETE},
- *     {@code OPTIONS} and {@code HEAD}.</li>
- * </ul>
+ * In addition, the following initialization parameters are available to tweak the amount of storage needed to capture request and response bodies:
+ * <blockquote>
+ * <table border="0" cellspacing="3" cellpadding="0">
+ *   <caption style="display:none">Supported initialization parameters</caption>
+ *   <thead>
+ *     <tr>
+ *       <th class="colFirst">Name</th>
+ *       <th class="colOne">Type</th>
+ *       <th class="colOne">Description</th>
+ *       <th class="colLast">Default</th>
+ *     </tr>
+ *   </thead>
+ *   <tbody>
+ *     <tr class="altColor">
+ *       <td class="colFirst">initialRequestCapacity</td>
+ *       <td class="colOne">int</td>
+ *       <td class="colOne">The initial capacity for the buffer used for capturing a request's body; not negative.
+ *                          May be overridden on a per-request basis by {@link #initialRequestCapacity(HttpServletRequest)}.</td>
+ *       <td class="colLast">{@code 32}</td>
+ *     </tr>
+ *     <tr class="rowColor">
+ *       <td class="colFirst">initialRequestCapacityFromContentLength</td>
+ *       <td class="colOne">boolean</td>
+ *       <td class="colOne">{@code true} to use the request's content length for the initial capacity.
+ *                          If {@code true}, the {@code initialRequestCapacity} initialization parameter is ignored.</td>
+ *       <td class="colLast">{@code false}</td>
+ *     </tr>
+ *     <tr class="altColor">
+ *       <td class="colFirst">requestLimit</td>
+ *       <td class="colOne">int</td>
+ *       <td class="colOne">The limit for the number of bytes or characters of a request's body to capture; not negative.
+ *                          May be overridden on a per-request basis by {@link #requestLimit(HttpServletRequest)}.</td>
+ *       <td class="colLast">{@link Integer#MAX_VALUE}</td>
+ *     </tr>
+ *     <tr class="rowColor">
+ *       <td class="colFirst">initialResponseCapacity</td>
+ *       <td class="colOne">int</td>
+ *       <td class="colOne">The initial capacity for the buffer used for capturing a response's body; not negative.
+ *                          May be overridden on a per-request basis by {@link #initialResponseCapacity(HttpServletRequest)}.</td>
+ *       <td class="colLast">{@code 32}</td>
+ *     </tr>
+ *     <tr class="altColor">
+ *       <td class="colFirst">responseLimit</td>
+ *       <td class="colOne">int</td>
+ *       <td class="colOne">The limit for the number of bytes or characters of a response's body to capture; not negative.
+ *                          May be overridden on a per-request basis by {@link #responseLimit(HttpServletRequest)}.</td>
+ *       <td class="colLast">{@link Integer#MAX_VALUE}</td>
+ *     </tr>
+ *   </tbody>
+ * </table>
+ * </blockquote>
+ * <p>
+ * Note that {@link #captureBody(HttpServletRequest)} can be used to completely turn off capturing a request's body; if this is the case,
+ * {@link #onBodyCaptured(BodyCapturingRequest)} is called immediately. To turn off capturing a response's body, set its limit to {@code 0} and ignore
+ * any call to {@link #onLimitReached(BodyCapturingResponse, HttpServletRequest)}.
  *
  * @author Rob Spoor
  */
@@ -237,25 +254,48 @@ public abstract class BodyCapturingFilter implements Filter {
         HttpServletRequest httpRequest = (HttpServletRequest) request;
         HttpServletResponse httpResponse = (HttpServletResponse) response;
 
-        BodyCapturingRequest bodyCapturingRequest;
-        if ((considerRequestReadAfterContentLength && request.getContentLengthLong() == 0) || hasNoBody(httpRequest.getMethod())) {
-            bodyCapturingRequest = new BodyCapturingRequest(httpRequest, false);
-            bodyRead(bodyCapturingRequest);
-        } else {
-            bodyCapturingRequest = new BodyCapturingRequest(httpRequest, true);
-        }
-        BodyCapturingResponse bodyCapturingResponse = new BodyCapturingResponse(httpRequest, httpResponse);
+        if (captureBody(httpRequest)) {
+            BodyCapturingRequest bodyCapturingRequest = new BodyCapturingRequest(httpRequest);
+            BodyCapturingResponse bodyCapturingResponse = new BodyCapturingResponse(httpRequest, httpResponse);
 
-        AsyncUtils.doFilter(bodyCapturingRequest, bodyCapturingResponse, chain, (req, resp) -> {
-            if (ensureRequestBodyConsumed) {
-                bodyCapturingRequest.consume(true);
-            }
-            bodyProduced(bodyCapturingResponse, httpRequest);
-        });
+            AsyncUtils.doFilter(bodyCapturingRequest, bodyCapturingResponse, chain, (req, resp) -> {
+                if (ensureRequestBodyConsumed) {
+                    bodyCapturingRequest.consume(true);
+                }
+                onBodyCaptured(bodyCapturingResponse, httpRequest);
+            });
+        } else {
+            onBodyCaptured(new BodyCapturingRequest(httpRequest));
+            BodyCapturingResponse bodyCapturingResponse = new BodyCapturingResponse(httpRequest, httpResponse);
+
+            AsyncUtils.doFilter(httpRequest, bodyCapturingResponse, chain, (req, resp) -> onBodyCaptured(bodyCapturingResponse, httpRequest));
+        }
     }
 
     /**
-     * Returns whether or not an HTTP method has no body. This will prevent (unnecessary) capturing of the body completely.
+     * Returns whether or not the body of a request should be captured.
+     * <p>
+     * If this method returns {@code false}, then {@link #onBodyCaptured(BodyCapturingRequest)} will be called immediately with a request for which
+     * the body will not have been captured. This prevents unnecessary capturing of the request body when it's not needed, e.g. because there is no
+     * request body.
+     * <p>
+     * This implementation returns {@code false} if either of the following condition holds:
+     * <ul>
+     * <li>The {@code considerRequestReadAfterContentLength} initialization parameter is {@code true} and the request's content length is {@code 0}.
+     *     </li>
+     * <li>{@link #hasNoBody(String)} returns {@code true}.</li>
+     * </ul>
+     *
+     * @param request The request for which to return whether or not the body should be captured.
+     * @return {@code true} if the request's body should be captured, or {@code false} otherwise.
+     */
+    protected boolean captureBody(HttpServletRequest request) {
+        return !((considerRequestReadAfterContentLength && request.getContentLengthLong() == 0) || hasNoBody(request.getMethod()));
+    }
+
+    /**
+     * Returns whether or not an HTTP method has no body. This method is used in {@link #captureBody(HttpServletRequest)} to prevent capturing the
+     * request body when it's certain that there is no request body.
      * <p>
      * This implementation returns whether or not the method is one of {@code GET}, {@code DELETE}, {@code OPTIONS} or {@code HEAD}.
      *
@@ -267,8 +307,8 @@ public abstract class BodyCapturingFilter implements Filter {
     }
 
     /**
-     * Ensures that the body of a request body is consumed. This can be used in downstream filters or servlets to ensure that
-     * {@link #bodyRead(BodyCapturingRequest)} will be called.
+     * Ensures that the body of a request body is consumed.
+     * This can be used in downstream filters or servlets to ensure that {@link #onBodyCaptured(BodyCapturingRequest)} will be called.
      * <p>
      * This method is shorthand for {@link #ensureBodyConsumed(HttpServletRequest, boolean) ensureBodyConsumed(request, true)}.
      *
@@ -280,20 +320,19 @@ public abstract class BodyCapturingFilter implements Filter {
     }
 
     /**
-     * Ensures that the body of a request body is consumed. This can be used in downstream filters or servlets to ensure that
-     * {@link #bodyRead(BodyCapturingRequest)} will be called.
+     * Ensures that the body of a request body is consumed.
+     * This can be used in downstream filters or servlets to ensure that {@link #onBodyCaptured(BodyCapturingRequest)} will be called.
+     * <p>
+     * If {@link ServletRequest#getReader()} or {@link ServletRequest#getInputStream()} was already called on the request, then the request body is
+     * consumed using the same method (to prevent any {@link IllegalStateException}. Otherwise, the {@code preferReader} flag determines whether to
+     * use {@link ServletRequest#getReader()} ({@code true}) or {@link ServletRequest#getInputStream()} ({@code false}).
+     * Use {@code true} if the request body is needed as a string (using {@link BodyCapturingRequest#capturedTextBody()}), or {@code false} if it's
+     * needed as bytes (using {@link BodyCapturingRequest#capturedBinaryBody()}).
      *
-     * @param request The request for which to ensure the request body is consumed.
-     * @param preferReader {@code true} to prefer using {@link ServletRequest#getReader()} over {@link ServletRequest#getInputStream()}.
-     *                         Although this method works both when {@link ServletRequest#getReader()} or {@link ServletRequest#getInputStream()} has
-     *                         been called, it may need to do so using a try-catch statement. This flag can be used to increase performance in two
-     *                         ways:
-     *                         <ul>
-     *                         <li>If it's known whether {@link ServletRequest#getReader()} or {@link ServletRequest#getInputStream()} is called, the
-     *                             {@link IllegalStateException} thrown by the other can be prevented.</li>
-     *                         <li>If the captured body is needed as a string, {@link BodyCapturingRequest#capturedTextBody()} is more efficient than
-     *                             {@link BodyCapturingRequest#capturedBinaryBodyAsString()}.</li>
-     *                         </ul>
+     * @param request The request for which to ensure the request body is consumed. This doesn't need to be a {@link BodyCapturingRequest}, it can
+     *                    also be a wrapper around the original {@link BodyCapturingRequest}.
+     * @param preferReader {@code true} to prefer using {@link ServletRequest#getReader()} over {@link ServletRequest#getInputStream()} if neither
+     *                         was called before.
      * @throws IOException If an I/O error occurs.
      */
     public static void ensureBodyConsumed(HttpServletRequest request, boolean preferReader) throws IOException {
@@ -304,49 +343,18 @@ public abstract class BodyCapturingFilter implements Filter {
         if (current instanceof BodyCapturingRequest) {
             BodyCapturingRequest bodyCapturingRequest = (BodyCapturingRequest) current;
             bodyCapturingRequest.consume(preferReader);
-        } else {
-            consumeBody(request, preferReader);
-        }
-    }
-
-    @SuppressWarnings("resource")
-    private static void consumeBody(HttpServletRequest request, boolean preferReader) throws IOException {
-        if (preferReader) {
-            try {
-                consume(request.getReader());
-            } catch (@SuppressWarnings("unused") IllegalStateException e) {
-                consume(request.getInputStream());
-            }
-        } else {
-            try {
-                consume(request.getInputStream());
-            } catch (@SuppressWarnings("unused") IllegalStateException e) {
-                consume(request.getReader());
-            }
-        }
-    }
-
-    private static void consume(InputStream inputStream) throws IOException {
-        byte[] buffer = new byte[1024];
-        while (inputStream.read(buffer) != -1) {
-            // discard contents
-        }
-    }
-
-    private static void consume(Reader reader) throws IOException {
-        char[] buffer = new char[1024];
-        while (reader.read(buffer) != -1) {
-            // discard contents
         }
     }
 
     /**
      * Called when the capture limit for a request's body is reached.
      * This method will be called at most once for each request.
+     * <p>
+     * This implementation does nothing.
      *
      * @param request The request for which the capture limit is reached.
      */
-    protected void limitReached(BodyCapturingRequest request) {
+    protected void onLimitReached(BodyCapturingRequest request) {
         // does nothing
     }
 
@@ -354,35 +362,46 @@ public abstract class BodyCapturingFilter implements Filter {
      * Called when a request's body has been read. This will be the case either if the request's body has been fully
      * {@link BodyCapturingRequest#bodyIsConsumed() consumed}, or if its {@link ServletRequest#getInputStream() input stream} or
      * {@link ServletRequest#getReader() reader} is closed.
-     * This method will be called at most once for each request. If all downstream filters and servlets fail to (completely) consume the request,
-     * this method will only be called if initialization parameter {@code ensureRequestBodyConsumed} is set to {@code true}.
+     * This method will be called at most once for each request.
+     * <p>
+     * If all downstream filters and servlets fail to (completely) consume the request, this method will not be called by default.
+     * Set initialization parameter {@code ensureRequestBodyConsumed} to {@code true} to ensure that the request body is always consumed.
+     * This will be done after the response has been completed (but before {@link #onBodyCaptured(BodyCapturingResponse, HttpServletRequest)} is
+     * called).
+     * <p>
+     * This implementation does nothing.
      *
      * @param request The request for which the body has been read.
      */
-    protected void bodyRead(BodyCapturingRequest request) {
+    protected void onBodyCaptured(BodyCapturingRequest request) {
         // does nothing
     }
 
     /**
      * Called when the capture limit for a response's body is reached.
      * This method will be called at most once for each response, unless {@link ServletResponse#reset()} or {@link ServletResponse#resetBuffer()} is
-     * called on the response.
+     * called on the response. For each call to either method, this method may be called at most once again.
+     * <p>
+     * This implementation does nothing.
      *
      * @param response The response for which the capture limit is reached.
      * @param request The request that lead to the response. This is provided to provide access to any request attributes.
      */
-    protected void limitReached(BodyCapturingResponse response, HttpServletRequest request) {
+    protected void onLimitReached(BodyCapturingResponse response, HttpServletRequest request) {
         // does nothing
     }
 
     /**
      * Called when a response's body has been produced.
-     * This method will be called exactly once for each response.
+     * This method will be called exactly once for each response, regardless of any call to {@link ServletResponse#reset()} or
+     * {@link ServletResponse#resetBuffer()}.
+     * <p>
+     * This implementation does nothing.
      *
      * @param response The response for which the body has been produced.
      * @param request The request that lead to the response. This is provided to provide access to any request attributes.
      */
-    protected void bodyProduced(BodyCapturingResponse response, HttpServletRequest request) {
+    protected void onBodyCaptured(BodyCapturingResponse response, HttpServletRequest request) {
         // does nothing
     }
 
@@ -482,17 +501,15 @@ public abstract class BodyCapturingFilter implements Filter {
         private final Runnable doneCallback;
         private final Runnable limitReachedCallback;
 
-        BodyCapturingRequest(HttpServletRequest request, boolean useDoneCallback) {
+        BodyCapturingRequest(HttpServletRequest request) {
             super(request);
 
             initialCapacity = initialRequestCapacity(request);
             limit = requestLimit(request);
             doneAfter = doneAfter(request);
 
-            doneCallback = useDoneCallback
-                    ? () -> bodyRead(this)
-                    : null;
-            limitReachedCallback = () -> limitReached(this);
+            doneCallback = () -> onBodyCaptured(this);
+            limitReachedCallback = () -> onLimitReached(this);
         }
 
         private long doneAfter(HttpServletRequest request) {
@@ -519,7 +536,12 @@ public abstract class BodyCapturingFilter implements Filter {
         }
 
         /**
-         * Returns the capture mode.
+         * Returns the capture mode:
+         * <ul>
+         * <li>{@link CaptureMode#BYTES} if {@link ServletRequest#getInputStream()} was used.</li>
+         * <li>{@link CaptureMode#TEXT} if {@link ServletRequest#getReader()} was used.</li>
+         * <li>{@link CaptureMode#NONE} if neither method was used.</li>
+         * </ul>
          *
          * @return The capture mode.
          */
@@ -584,8 +606,8 @@ public abstract class BodyCapturingFilter implements Filter {
         }
 
         /**
-         * Returns the total body size, as far as the body has already been read. This can be a number of bytes or characters, depending on the
-         * {@link #captureMode() capture mode}.
+         * Returns the total body size, as far as the body has already been read.
+         * This can be a number of bytes or characters, depending on the {@link #captureMode() capture mode}.
          *
          * @return The total body size.
          */
@@ -655,7 +677,7 @@ public abstract class BodyCapturingFilter implements Filter {
             initialCapacity = initialResponseCapacity(request);
             limit = responseLimit(request);
 
-            limitReachedCallback = () -> limitReached(this, request);
+            limitReachedCallback = () -> onLimitReached(this, request);
         }
 
         @Override
@@ -685,7 +707,12 @@ public abstract class BodyCapturingFilter implements Filter {
         }
 
         /**
-         * Returns the capture mode.
+         * Returns the capture mode:
+         * <ul>
+         * <li>{@link CaptureMode#BYTES} if {@link ServletResponse#getOutputStream()} was used.</li>
+         * <li>{@link CaptureMode#TEXT} if {@link ServletResponse#getWriter()} was used.</li>
+         * <li>{@link CaptureMode#NONE} if neither method was used.</li>
+         * </ul>
          *
          * @return The capture mode.
          */
@@ -750,8 +777,8 @@ public abstract class BodyCapturingFilter implements Filter {
         }
 
         /**
-         * Returns the total body size, as far as the body has already been read. This can be a number of bytes or characters, depending on the
-         * {@link #captureMode() capture mode}.
+         * Returns the total body size, as far as the body has already been written.
+         * This can be a number of bytes or characters, depending on the {@link #captureMode() capture mode}.
          *
          * @return The total body size.
          */
@@ -908,7 +935,10 @@ public abstract class BodyCapturingFilter implements Filter {
 
         private void consume() throws IOException {
             if (!consumed) {
-                BodyCapturingFilter.consume(this);
+                byte[] buffer = new byte[1024];
+                while (read(buffer) != -1) {
+                    // discard contents
+                }
             }
         }
     }
@@ -1055,7 +1085,10 @@ public abstract class BodyCapturingFilter implements Filter {
 
         private void consume() throws IOException {
             if (!consumed) {
-                BodyCapturingFilter.consume(this);
+                char[] buffer = new char[1024];
+                while (read(buffer) != -1) {
+                    // discard contents
+                }
             }
         }
     }
@@ -1273,7 +1306,7 @@ public abstract class BodyCapturingFilter implements Filter {
     }
 
     private static <T> Consumer<T> consumer(Runnable callback) {
-        return callback != null ? t -> callback.run() : null;
+        return t -> callback.run();
     }
 
     private static final class ByteCaptor extends ByteArrayOutputStream {

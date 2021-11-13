@@ -17,10 +17,9 @@
 
 package com.github.robtimus.jakarta.servlet;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -94,6 +93,7 @@ class ServletUtilsTest {
 
         @Test
         @DisplayName("transformation returning non-ServletInputStream")
+        @SuppressWarnings("resource")
         void testTransformationReturningNonServletInputStream() throws IOException {
             byte[] data = "hello world".getBytes(StandardCharsets.UTF_8);
 
@@ -104,7 +104,7 @@ class ServletUtilsTest {
                     ServletInputStream transformed = ServletUtils.transform(inputStream, transformation)) {
 
                 assertNotSame(inputStream, transformed);
-                assertThat(transformed, instanceOf(ServletInputStreamWrapper.class));
+                assertInstanceOf(ServletInputStreamWrapper.class, transformed);
 
                 byte[] buffer = new byte[data.length];
                 assertEquals(buffer.length, transformed.read(buffer));
@@ -195,6 +195,7 @@ class ServletUtilsTest {
 
         @Test
         @DisplayName("transformation returning non-ServletOutputStream")
+        @SuppressWarnings("resource")
         void testTransformationReturningNonServletOutputStream() throws IOException {
             byte[] data = "hello world".getBytes(StandardCharsets.UTF_8);
 
@@ -205,7 +206,7 @@ class ServletUtilsTest {
                     ServletOutputStream transformed = ServletUtils.transform(outputStream, transformation)) {
 
                 assertNotSame(outputStream, transformed);
-                assertThat(transformed, instanceOf(ServletOutputStreamWrapper.class));
+                assertInstanceOf(ServletOutputStreamWrapper.class, transformed);
 
                 transformed.write(data);
                 assertArrayEquals(data, transformationResult.toByteArray());

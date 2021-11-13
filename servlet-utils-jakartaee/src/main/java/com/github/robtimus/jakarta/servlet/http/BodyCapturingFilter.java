@@ -207,12 +207,12 @@ public abstract class BodyCapturingFilter implements Filter {
             return defaultValue;
         }
         switch (rawValue) {
-        case "true": //$NON-NLS-1$
-            return true;
-        case "false": //$NON-NLS-1$
-            return false;
-        default:
-            throw new IllegalArgumentException(Messages.BodyCapturingFilter.invalidBooleanParameter.get(name, rawValue));
+            case "true": //$NON-NLS-1$
+                return true;
+            case "false": //$NON-NLS-1$
+                return false;
+            default:
+                throw new IllegalArgumentException(Messages.BodyCapturingFilter.invalidBooleanParameter.get(name, rawValue));
         }
     }
 
@@ -290,7 +290,8 @@ public abstract class BodyCapturingFilter implements Filter {
      * @return {@code true} if the request's body should be captured, or {@code false} otherwise.
      */
     protected boolean captureBody(HttpServletRequest request) {
-        return !((considerRequestReadAfterContentLength && request.getContentLengthLong() == 0) || hasNoBody(request.getMethod()));
+        return !(considerRequestReadAfterContentLength && request.getContentLengthLong() == 0
+                || hasNoBody(request.getMethod()));
     }
 
     /**

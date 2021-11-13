@@ -32,7 +32,7 @@
   <description>Provides utility classes for working with servlets in Java EE projects</description>
 
   <properties>
-    <version.jetty-servlet>9.4.42.v20210604</version.jetty-servlet>
+    <version.jetty-servlet>9.4.44.v20210927</version.jetty-servlet>
 
     <robtimus.site-index.generate>false</robtimus.site-index.generate>
   </properties>

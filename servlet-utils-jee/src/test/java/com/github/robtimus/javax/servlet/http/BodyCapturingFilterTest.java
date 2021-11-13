@@ -7272,12 +7272,12 @@ class BodyCapturingFilterTest {
 
         private String text(CaptureMode captureMode, Supplier<String> ifText, Supplier<String> ifBytes) {
             switch (captureMode) {
-            case TEXT:
-                return ifText.get();
-            case BYTES:
-                return ifBytes.get();
-            default:
-                return null;
+                case TEXT:
+                    return ifText.get();
+                case BYTES:
+                    return ifBytes.get();
+                default:
+                    return null;
             }
         }
 

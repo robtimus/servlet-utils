@@ -33,7 +33,7 @@
 
   <properties>
     <!-- Note: this requires Java 11 to run -->
-    <version.jetty-servlet>11.0.5</version.jetty-servlet>
+    <version.jetty-servlet>11.0.7</version.jetty-servlet>
 
     <robtimus.site-index.generate>false</robtimus.site-index.generate>
   </properties>

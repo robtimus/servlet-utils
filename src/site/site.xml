@@ -20,13 +20,11 @@
   xsi:schemaLocation="https://maven.apache.org/xsd/decoration-1.7.0.xsd https://maven.apache.org/xsd/decoration-1.7.0.xsd">
 
   <body>
-    <head />
     <menu name="servlet-utils">
       <item name="Overview" href="index.html" />
       <item name="Download" href="download.html" />
       <item name="Releases" href="https://github.com/robtimus/servlet-utils/releases" />
       <item name="JavaDocs" href="apidocs/index.html" />
     </menu>
-    <menu ref="modules" />
   </body>
 </project>

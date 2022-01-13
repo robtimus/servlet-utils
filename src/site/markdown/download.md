@@ -8,4 +8,4 @@ See [Source Code Management](scm.html) for more information.
 
 ## Download binaries / sources
 
-Download the latest binaries or source bundles from the [GitHub release page](https://github.com/robtimus/servlet-utils/releases).
+Download the latest binary or source bundle from the [GitHub release page](https://github.com/robtimus/servlet-utils/releases).

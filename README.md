@@ -1,3 +1,3 @@
-# servlet-utils-parent
+# servlet-utils
 
 TODO

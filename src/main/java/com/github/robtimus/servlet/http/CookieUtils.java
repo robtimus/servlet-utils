@@ -20,8 +20,8 @@ package com.github.robtimus.servlet.http;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.stream.Stream;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * A utility class for cookies.

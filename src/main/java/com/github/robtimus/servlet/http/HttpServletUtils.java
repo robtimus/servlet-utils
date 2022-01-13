@@ -20,8 +20,8 @@ package com.github.robtimus.servlet.http;
 import java.util.Enumeration;
 import java.util.Objects;
 import java.util.function.BiConsumer;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * A utility class for HTTP servlets.

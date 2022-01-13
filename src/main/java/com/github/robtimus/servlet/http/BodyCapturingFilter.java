@@ -33,24 +33,21 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.ServletInputStream;
-import javax.servlet.ServletOutputStream;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletRequestWrapper;
-import javax.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.github.robtimus.servlet.AsyncUtils;
 import com.github.robtimus.servlet.parameters.BooleanParameter;
 import com.github.robtimus.servlet.parameters.IntParameter;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletInputStream;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * A filter that captures request and response bodies. When the request body is fully read, {@link #onBodyCaptured(BodyCapturingRequest)} is called.
@@ -64,7 +61,7 @@ import com.github.robtimus.servlet.parameters.IntParameter;
  * If that's not possible, the following initialization parameters are available to attempt to ensure {@link #onBodyCaptured(BodyCapturingRequest)} is
  * still called:
  * <blockquote>
- * <table border="0" cellspacing="3" cellpadding="0">
+ * <table class="striped">
  *   <caption style="display:none">Supported initialization parameters</caption>
  *   <thead>
  *     <tr>
@@ -95,7 +92,7 @@ import com.github.robtimus.servlet.parameters.IntParameter;
  * </blockquote>
  * In addition, the following initialization parameters are available to tweak the amount of storage needed to capture request and response bodies:
  * <blockquote>
- * <table border="0" cellspacing="3" cellpadding="0">
+ * <table class="striped">
  *   <caption style="display:none">Supported initialization parameters</caption>
  *   <thead>
  *     <tr>
@@ -153,8 +150,6 @@ import com.github.robtimus.servlet.parameters.IntParameter;
  */
 public abstract class BodyCapturingFilter implements Filter {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(BodyCapturingFilter.class);
-
     static final String INITIAL_REQUEST_CAPACITY = "initialRequestCapacity"; //$NON-NLS-1$
     static final String INITIAL_REQUEST_CAPACITY_FROM_CONTENT_LENGTH = "initialRequestCapacityFromContentLength"; //$NON-NLS-1$
     static final String REQUEST_LIMIT = "requestLimit"; //$NON-NLS-1$
@@ -182,9 +177,6 @@ public abstract class BodyCapturingFilter implements Filter {
     private int initialResponseCapacity;
     private int responseLimit;
 
-    private Supplier<String> requestCharacterEncoding;
-    private Supplier<String> responseCharacterEncoding;
-
     @Override
     public void init(FilterConfig filterConfig) {
         this.filterConfig = filterConfig;
@@ -208,37 +200,6 @@ public abstract class BodyCapturingFilter implements Filter {
         responseLimit = IntParameter.of(filterConfig, RESPONSE_LIMIT)
                 .atLeast(0)
                 .valueWithDefault(Integer.MAX_VALUE);
-
-        requestCharacterEncoding = requestCharacterEncoding();
-        responseCharacterEncoding = responseCharacterEncoding();
-    }
-
-    private Supplier<String> requestCharacterEncoding() {
-        // ServletContext.getRequestCharacterEncoding() was added in Servlet 4.0.
-        // In Servlet 3.x using the method results in a LinkageError (with Jetty, an AbstractMethodError).
-        // Catch the error and instead supply null.
-        Supplier<String> result = () -> filterConfig.getServletContext().getRequestCharacterEncoding();
-        try {
-            result.get();
-            return result;
-        } catch (LinkageError e) {
-            LOGGER.warn(Messages.BodyCapturingFilter.requestCharacterEncodingNotAvailable.get(e));
-            return () -> null;
-        }
-    }
-
-    private Supplier<String> responseCharacterEncoding() {
-        // ServletContext.getResponseCharacterEncoding() was added in Servlet 4.0.
-        // In Servlet 3.x using the method results in a LinkageError (with Jetty, an AbstractMethodError).
-        // Catch the error and instead supply null.
-        Supplier<String> result = () -> filterConfig.getServletContext().getResponseCharacterEncoding();
-        try {
-            result.get();
-            return result;
-        } catch (LinkageError e) {
-            LOGGER.warn(Messages.BodyCapturingFilter.responseCharacterEncodingNotAvailable.get(e));
-            return () -> null;
-        }
     }
 
     int initialRequestCapacity() {
@@ -609,7 +570,7 @@ public abstract class BodyCapturingFilter implements Filter {
             if (bodyCapturingInputStream != null) {
                 String encoding = getCharacterEncoding();
                 if (encoding == null) {
-                    encoding = requestCharacterEncoding.get();
+                    encoding = filterConfig.getServletContext().getRequestCharacterEncoding();
                 }
                 Charset charset = encoding != null ? Charset.forName(encoding) : StandardCharsets.UTF_8;
                 return bodyCapturingInputStream.captured(charset);
@@ -780,7 +741,7 @@ public abstract class BodyCapturingFilter implements Filter {
             if (bodyCapturingOutputStream != null) {
                 String encoding = getCharacterEncoding();
                 if (encoding == null) {
-                    encoding = responseCharacterEncoding.get();
+                    encoding = filterConfig.getServletContext().getResponseCharacterEncoding();
                 }
                 Charset charset = encoding != null ? Charset.forName(encoding) : StandardCharsets.UTF_8;
                 return bodyCapturingOutputStream.captured(charset);

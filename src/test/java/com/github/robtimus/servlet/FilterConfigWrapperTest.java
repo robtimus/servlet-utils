@@ -32,12 +32,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.NoSuchElementException;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletContext;
 
 @SuppressWarnings("nls")
 class FilterConfigWrapperTest {

@@ -27,7 +27,7 @@
   </parent>
 
   <artifactId>servlet-utils</artifactId>
-  <version>1.1-SNAPSHOT</version>
+  <version>2.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>servlet-utils</name>
@@ -62,9 +62,11 @@
   </issueManagement>
 
   <properties>
+    <version.java>11</version.java>
+
     <version.io-functions>2.0</version.io-functions>
-    <version.jetty-servlet>9.4.44.v20210927</version.jetty-servlet>
-    <version.servlet-api>4.0.4</version.servlet-api>
+    <version.jetty-servlet>11.0.7</version.jetty-servlet>
+    <version.servlet-api>5.0.0</version.servlet-api>
   </properties>
 
   <dependencies>
@@ -142,7 +144,7 @@
           <artifactId>maven-javadoc-plugin</artifactId>
           <configuration>
             <links>
-              <link>https://jakarta.ee/specifications/platform/8/apidocs/</link>
+              <link>https://jakarta.ee/specifications/platform/9/apidocs/</link>
             </links>
           </configuration>
         </plugin>
@@ -238,11 +240,6 @@
       </plugin>
 
       <plugin>
-        <groupId>org.moditect</groupId>
-        <artifactId>moditect-maven-plugin</artifactId>
-      </plugin>
-
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
       </plugin>
@@ -266,6 +263,14 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Allow JUnit to access the test classes -->
+          <argLine>
+            --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet=ALL-UNNAMED
+            --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.http=ALL-UNNAMED
+            --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.parameters=ALL-UNNAMED
+          </argLine>
+        </configuration>
       </plugin>
 
       <plugin>

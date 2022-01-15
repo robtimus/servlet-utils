@@ -151,7 +151,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(INITIAL_REQUEST_CAPACITY)).thenReturn("-1");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
 
             @Test
@@ -160,7 +160,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(INITIAL_REQUEST_CAPACITY)).thenReturn("");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
         }
 
@@ -194,7 +194,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(INITIAL_REQUEST_CAPACITY_FROM_CONTENT_LENGTH)).thenReturn("");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
         }
 
@@ -227,7 +227,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(REQUEST_LIMIT)).thenReturn("-1");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
 
             @Test
@@ -236,7 +236,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(REQUEST_LIMIT)).thenReturn("");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
         }
 
@@ -270,7 +270,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH)).thenReturn("");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
         }
 
@@ -304,7 +304,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(ENSURE_REQUEST_BODY_CONSUMED)).thenReturn("");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
         }
 
@@ -337,7 +337,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(INITIAL_RESPONSE_CAPACITY)).thenReturn("-1");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
 
             @Test
@@ -346,7 +346,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(INITIAL_RESPONSE_CAPACITY)).thenReturn("");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
         }
 
@@ -379,7 +379,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(RESPONSE_LIMIT)).thenReturn("-1");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
 
             @Test
@@ -388,7 +388,7 @@ class BodyCapturingFilterTest {
                 when(filterConfig.getInitParameter(RESPONSE_LIMIT)).thenReturn("");
 
                 BodyCapturingFilter filter = new BodyCapturingFilter() { /* no overrides */ };
-                assertThrows(IllegalArgumentException.class, () -> filter.init(filterConfig));
+                assertThrows(IllegalStateException.class, () -> filter.init(filterConfig));
             }
         }
     }

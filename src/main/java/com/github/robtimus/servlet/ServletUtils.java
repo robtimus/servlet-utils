@@ -39,7 +39,6 @@ import com.github.robtimus.io.function.IOFunction;
 public final class ServletUtils {
 
     private ServletUtils() {
-        throw new IllegalStateException("cannot create instances of " + getClass().getName()); //$NON-NLS-1$
     }
 
     /**

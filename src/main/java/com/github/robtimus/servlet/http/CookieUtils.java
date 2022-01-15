@@ -31,7 +31,6 @@ import javax.servlet.http.HttpServletRequest;
 public final class CookieUtils {
 
     private CookieUtils() {
-        throw new IllegalStateException("cannot create instances of " + getClass().getName()); //$NON-NLS-1$
     }
 
     /**

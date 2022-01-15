@@ -5,4 +5,5 @@ module com.github.robtimus.servlet {
 
     exports com.github.robtimus.servlet;
     exports com.github.robtimus.servlet.http;
+    exports com.github.robtimus.servlet.parameters;
 }

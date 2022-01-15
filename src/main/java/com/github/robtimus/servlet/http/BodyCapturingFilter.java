@@ -49,6 +49,8 @@ import javax.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.github.robtimus.servlet.AsyncUtils;
+import com.github.robtimus.servlet.parameters.BooleanParameter;
+import com.github.robtimus.servlet.parameters.IntParameter;
 
 /**
  * A filter that captures request and response bodies. When the request body is fully read, {@link #onBodyCaptured(BodyCapturingRequest)} is called.
@@ -187,44 +189,28 @@ public abstract class BodyCapturingFilter implements Filter {
     public void init(FilterConfig filterConfig) {
         this.filterConfig = filterConfig;
 
-        initialRequestCapacity = readIntParameter(INITIAL_REQUEST_CAPACITY, DEFAULT_INITIAL_CAPACITY);
-        initialRequestCapacityFromContentLength = readBooleanParameter(INITIAL_REQUEST_CAPACITY_FROM_CONTENT_LENGTH, false);
-        requestLimit = readIntParameter(REQUEST_LIMIT, Integer.MAX_VALUE);
-        considerRequestReadAfterContentLength = readBooleanParameter(CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH, false);
-        ensureRequestBodyConsumed = readBooleanParameter(ENSURE_REQUEST_BODY_CONSUMED, false);
+        initialRequestCapacity = IntParameter.of(filterConfig, INITIAL_REQUEST_CAPACITY)
+                .atLeast(0)
+                .valueWithDefault(DEFAULT_INITIAL_CAPACITY);
+        initialRequestCapacityFromContentLength = BooleanParameter.of(filterConfig, INITIAL_REQUEST_CAPACITY_FROM_CONTENT_LENGTH)
+                .valueWithDefault(false);
+        requestLimit = IntParameter.of(filterConfig, REQUEST_LIMIT)
+                .atLeast(0)
+                .valueWithDefault(Integer.MAX_VALUE);
+        considerRequestReadAfterContentLength = BooleanParameter.of(filterConfig, CONSIDER_REQUEST_READ_AFTER_CONTENT_LENGTH)
+                .valueWithDefault(false);
+        ensureRequestBodyConsumed = BooleanParameter.of(filterConfig, ENSURE_REQUEST_BODY_CONSUMED)
+                .valueWithDefault(false);
 
-        initialResponseCapacity = readIntParameter(INITIAL_RESPONSE_CAPACITY, DEFAULT_INITIAL_CAPACITY);
-        responseLimit = readIntParameter(RESPONSE_LIMIT, Integer.MAX_VALUE);
+        initialResponseCapacity = IntParameter.of(filterConfig, INITIAL_RESPONSE_CAPACITY)
+                .atLeast(0)
+                .valueWithDefault(DEFAULT_INITIAL_CAPACITY);
+        responseLimit = IntParameter.of(filterConfig, RESPONSE_LIMIT)
+                .atLeast(0)
+                .valueWithDefault(Integer.MAX_VALUE);
 
         requestCharacterEncoding = requestCharacterEncoding();
         responseCharacterEncoding = responseCharacterEncoding();
-    }
-
-    private int readIntParameter(String name, int defaultValue) {
-        String rawValue = filterConfig.getInitParameter(name);
-        if (rawValue == null) {
-            return defaultValue;
-        }
-        int value = Integer.parseInt(rawValue);
-        if (value < 0) {
-            throw new IllegalArgumentException(Messages.BodyCapturingFilter.invalidIntParameter.get(name, rawValue));
-        }
-        return value;
-    }
-
-    private boolean readBooleanParameter(String name, boolean defaultValue) {
-        String rawValue = filterConfig.getInitParameter(name);
-        if (rawValue == null) {
-            return defaultValue;
-        }
-        switch (rawValue) {
-            case "true": //$NON-NLS-1$
-                return true;
-            case "false": //$NON-NLS-1$
-                return false;
-            default:
-                throw new IllegalArgumentException(Messages.BodyCapturingFilter.invalidBooleanParameter.get(name, rawValue));
-        }
     }
 
     private Supplier<String> requestCharacterEncoding() {

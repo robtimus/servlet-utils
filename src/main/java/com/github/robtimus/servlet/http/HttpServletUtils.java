@@ -31,7 +31,6 @@ import javax.servlet.http.HttpServletResponse;
 public final class HttpServletUtils {
 
     private HttpServletUtils() {
-        throw new IllegalStateException("cannot create instances of " + getClass().getName()); //$NON-NLS-1$
     }
 
     /**

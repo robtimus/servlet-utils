@@ -39,7 +39,6 @@ public final class AsyncUtils {
     private static final Logger LOGGER = LoggerFactory.getLogger(AsyncUtils.class);
 
     private AsyncUtils() {
-        throw new IllegalStateException("cannot create instances of " + getClass().getName()); //$NON-NLS-1$
     }
 
     /**

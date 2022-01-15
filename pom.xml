@@ -219,6 +219,21 @@
               <suppressWarnings>nls</suppressWarnings>
             </configuration>
           </execution>
+          <execution>
+            <id>generate-parameters-messages</id>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <configuration>
+              <bundleName>com.github.robtimus.servlet.servlet-utils-parameters</bundleName>
+              <className>com.github.robtimus.servlet.parameters.Messages</className>
+              <licenseText>Apache-2.0</licenseText>
+              <licenseCopyrightHolder>Rob Spoor</licenseCopyrightHolder>
+              <licenseCopyrightYear>2022</licenseCopyrightYear>
+              <publicVisibility>false</publicVisibility>
+              <suppressWarnings>nls</suppressWarnings>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
 

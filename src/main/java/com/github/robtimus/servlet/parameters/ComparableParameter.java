@@ -25,6 +25,7 @@ import java.util.function.UnaryOperator;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
+import javax.servlet.ServletRequest;
 
 /**
  * Represents a parameter that should have a value of a specific comparable type.
@@ -221,6 +222,26 @@ public final class ComparableParameter<T extends Comparable<? super T>> {
         Objects.requireNonNull(name);
         Objects.requireNonNull(converter);
         return of(context::getInitParameter, name, converter);
+    }
+
+    /**
+     * Returns a comparable parameter for a servlet request.
+     *
+     * @param <T> The comparable type.
+     * @param request The servlet request config to read the parameter from.
+     * @param name The name of the parameter.
+     * @param converter A function for converting string values to comparable values. It will never be called with a {@code null} value.
+     * @return An object representing the parameter with the given name from the given servlet request. It may or may not be set.
+     * @throws NullPointerException If the given servlet request, name or converter is {@code null}.
+     * @throws IllegalStateException If the parameter is set but the converter throws an exception.
+     */
+    public static <T extends Comparable<? super T>> ComparableParameter<T> of(ServletRequest request, String name,
+                                                                              Function<String, ? extends T> converter) {
+
+        Objects.requireNonNull(request);
+        Objects.requireNonNull(name);
+        Objects.requireNonNull(converter);
+        return of(request::getParameter, name, converter);
     }
 
     private static <T extends Comparable<? super T>> ComparableParameter<T> of(UnaryOperator<String> getter, String name,

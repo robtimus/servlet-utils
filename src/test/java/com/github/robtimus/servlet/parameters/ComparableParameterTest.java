@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
+import javax.servlet.ServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -494,6 +495,41 @@ class ComparableParameterTest {
         void testInvalidValue(String value) {
             when(context.getInitParameter(PARAM_NAME)).thenReturn(value);
             assertThrows(IllegalStateException.class, () -> ComparableParameter.of(context, PARAM_NAME, BigDecimal::new));
+        }
+    }
+
+    @Nested
+    @DisplayName("of(ServletRequest, String)")
+    class OfServletRequest {
+
+        private ServletRequest request;
+
+        @BeforeEach
+        void initRequest() {
+            request = mock(ServletRequest.class);
+        }
+
+        @Test
+        @DisplayName("parameter not set")
+        void testNotSet() {
+            ComparableParameter<BigDecimal> parameter = ComparableParameter.of(request, PARAM_NAME, BigDecimal::new);
+            assertFalse(parameter.isSet());
+        }
+
+        @Test
+        @DisplayName("valid value")
+        void testValidValue() {
+            when(request.getParameter(PARAM_NAME)).thenReturn("1.0");
+            ComparableParameter<BigDecimal> parameter = ComparableParameter.of(request, PARAM_NAME, BigDecimal::new);
+            assertTrue(parameter.isSet());
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = { "1s", "1E", "x" })
+        @DisplayName("invalid value")
+        void testInvalidValue(String value) {
+            when(request.getParameter(PARAM_NAME)).thenReturn(value);
+            assertThrows(IllegalStateException.class, () -> ComparableParameter.of(request, PARAM_NAME, BigDecimal::new));
         }
     }
 }

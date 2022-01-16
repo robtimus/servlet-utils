@@ -30,6 +30,7 @@ import java.util.regex.Pattern;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
+import javax.servlet.ServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -633,6 +634,33 @@ class StringParameterTest {
         void testParameterSet() {
             when(context.getInitParameter(PARAM_NAME)).thenReturn("1.0");
             StringParameter parameter = StringParameter.of(context, PARAM_NAME);
+            assertTrue(parameter.isSet());
+        }
+    }
+
+    @Nested
+    @DisplayName("of(ServletRequest, String)")
+    class OfServletRequest {
+
+        private ServletRequest request;
+
+        @BeforeEach
+        void initRequest() {
+            request = mock(ServletRequest.class);
+        }
+
+        @Test
+        @DisplayName("parameter not set")
+        void testNotSet() {
+            StringParameter parameter = StringParameter.of(request, PARAM_NAME);
+            assertFalse(parameter.isSet());
+        }
+
+        @Test
+        @DisplayName("parameter set")
+        void testParameterSet() {
+            when(request.getParameter(PARAM_NAME)).thenReturn("1.0");
+            StringParameter parameter = StringParameter.of(request, PARAM_NAME);
             assertTrue(parameter.isSet());
         }
     }

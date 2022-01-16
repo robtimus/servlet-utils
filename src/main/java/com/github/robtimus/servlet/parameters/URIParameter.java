@@ -26,6 +26,7 @@ import java.util.function.UnaryOperator;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
+import javax.servlet.ServletRequest;
 
 /**
  * Represents a parameter that should have a URI value.
@@ -165,6 +166,20 @@ public final class URIParameter {
         Objects.requireNonNull(context);
         Objects.requireNonNull(name);
         return of(context::getInitParameter, name);
+    }
+
+    /**
+     * Returns a URI parameter for a servlet request.
+     *
+     * @param request The servlet request to read the parameter from.
+     * @param name The name of the parameter.
+     * @return An object representing the parameter with the given name from the given servlet request. It may or may not be set.
+     * @throws IllegalStateException If the parameter is set but does not have a URI value.
+     */
+    public static URIParameter of(ServletRequest request, String name) {
+        Objects.requireNonNull(request);
+        Objects.requireNonNull(name);
+        return of(request::getParameter, name);
     }
 
     private static URIParameter of(UnaryOperator<String> getter, String name) {

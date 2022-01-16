@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
+import javax.servlet.ServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -229,6 +230,41 @@ class BooleanParameterTest {
         void testInvalidValue(String value) {
             when(context.getInitParameter(PARAM_NAME)).thenReturn(value);
             assertThrows(IllegalStateException.class, () -> BooleanParameter.of(context, PARAM_NAME));
+        }
+    }
+
+    @Nested
+    @DisplayName("of(ServletRequest, String)")
+    class OfServletRequest {
+
+        private ServletRequest request;
+
+        @BeforeEach
+        void initRequest() {
+            request = mock(ServletRequest.class);
+        }
+
+        @Test
+        @DisplayName("parameter not set")
+        void testNotSet() {
+            BooleanParameter parameter = BooleanParameter.of(request, PARAM_NAME);
+            assertFalse(parameter.isSet());
+        }
+
+        @Test
+        @DisplayName("valid value")
+        void testValidValue() {
+            when(request.getParameter(PARAM_NAME)).thenReturn("true");
+            BooleanParameter parameter = BooleanParameter.of(request, PARAM_NAME);
+            assertTrue(parameter.isSet());
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = { "TRUE", "FALSE", "x" })
+        @DisplayName("invalid value")
+        void testInvalidValue(String value) {
+            when(request.getParameter(PARAM_NAME)).thenReturn(value);
+            assertThrows(IllegalStateException.class, () -> BooleanParameter.of(request, PARAM_NAME));
         }
     }
 }

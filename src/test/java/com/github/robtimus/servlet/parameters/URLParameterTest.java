@@ -30,6 +30,7 @@ import java.util.Collection;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
+import javax.servlet.ServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -379,6 +380,40 @@ class URLParameterTest {
         void testInvalidValue() {
             when(context.getInitParameter(PARAM_NAME)).thenReturn("https://[1::/path");
             assertThrows(IllegalStateException.class, () -> URLParameter.of(context, PARAM_NAME));
+        }
+    }
+
+    @Nested
+    @DisplayName("of(ServletRequest, String)")
+    class OfServletRequest {
+
+        private ServletRequest request;
+
+        @BeforeEach
+        void initRequest() {
+            request = mock(ServletRequest.class);
+        }
+
+        @Test
+        @DisplayName("parameter not set")
+        void testNotSet() {
+            URLParameter parameter = URLParameter.of(request, PARAM_NAME);
+            assertFalse(parameter.isSet());
+        }
+
+        @Test
+        @DisplayName("valid value")
+        void testValidValue() {
+            when(request.getParameter(PARAM_NAME)).thenReturn("https://example.org");
+            URLParameter parameter = URLParameter.of(request, PARAM_NAME);
+            assertTrue(parameter.isSet());
+        }
+
+        @Test
+        @DisplayName("invalid value")
+        void testInvalidValue() {
+            when(request.getParameter(PARAM_NAME)).thenReturn("https://[1::/path");
+            assertThrows(IllegalStateException.class, () -> URLParameter.of(request, PARAM_NAME));
         }
     }
 

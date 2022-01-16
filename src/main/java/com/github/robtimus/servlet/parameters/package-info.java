@@ -17,5 +17,12 @@
 
 /**
  * Provides classes and interfaces for working with (init) parameters.
+ * <p>
+ * The classes in this package are usually used in the following way inside init methods, using int as example:
+ * <pre><code>
+ * field = IntParameter.of(config, name)
+ *         // assertions, e.g. atLeast(0)
+ *         // retrieve value using requiredValue() or valueWithDefault(...)
+ * </code></pre>
  */
 package com.github.robtimus.servlet.parameters;

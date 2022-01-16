@@ -18,6 +18,10 @@ Sometimes it's necessary to transform the input and/or output. Class [ServletUti
 
 In addition, classes [InputTransformingHttpServletRequestWrapper](https://robtimus.github.io/servlet-utils/apidocs/com/github/robtimus/servlet/http/InputTransformingHttpServletRequestWrapper.html) and [OutputTransformingHttpServletResponseWrapper](https://robtimus.github.io/servlet-utils/apidocs/com/github/robtimus/servlet/http/OutputTransformingHttpServletResponseWrapper.html) make it easy to wrap an `HttpServletRequest` or `HttpServletResponse` with transforming input or output. Simply override the necessary `transform` method to provide the actual transformation.
 
+## Cookie reading
+
+Class [CookieUtils](https://robtimus.github.io/servlet-utils/apidocs/com/github/robtimus/servlet/http/CookieUtils.html) contains methods to read cookies as optionals and streams.
+
 ## Asynchronous support for try-finally
 
 Method [AsyncUtils.doFilter](https://robtimus.github.io/servlet-utils/apidocs/com/github/robtimus/servlet/AsyncUtils.html#doFilter-javax.servlet.ServletRequest-javax.servlet.ServletResponse-javax.servlet.FilterChain-com.github.robtimus.servlet.ServletConsumer-) can be used as a replacement for a try-finally block that also works with asynchronous request handling.

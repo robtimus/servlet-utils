@@ -743,7 +743,9 @@ class ServletUtilsTest {
                 printStream.println(Double.POSITIVE_INFINITY);
             }
 
-            assertArrayEquals(expected.toByteArray(), outputStream.toByteArray());
+            // ServletOutputStream explicitly writes \r\n, no matter the OS
+            // PrintStream may use \n instead of \r\n; replace \r\n with \n, then replace \n with \r\n again; this ensures every line uses \r\n
+            assertEquals(expected.toString().replace("\r\n", "\n").replace("\n", "\r\n"), outputStream.toString());
         }
     }
 }

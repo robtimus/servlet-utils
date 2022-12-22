@@ -58,7 +58,7 @@ public final class StringParameter {
      */
     public String requiredValue() {
         if (value == null) {
-            throw new IllegalStateException(Messages.Parameter.missing.get(name));
+            throw new IllegalStateException(Messages.Parameter.missing(name));
         }
         return value;
     }
@@ -84,7 +84,7 @@ public final class StringParameter {
     public StringParameter atLeast(String minValue) {
         Objects.requireNonNull(minValue);
         if (value != null && value.compareTo(minValue) < 0) {
-            throw new IllegalStateException(Messages.Parameter.valueSmaller.get(name, minValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueSmaller(name, minValue, value));
         }
         return this;
     }
@@ -100,7 +100,7 @@ public final class StringParameter {
     public StringParameter atMost(String maxValue) {
         Objects.requireNonNull(maxValue);
         if (value != null && value.compareTo(maxValue) > 0) {
-            throw new IllegalStateException(Messages.Parameter.valueLarger.get(name, maxValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueLarger(name, maxValue, value));
         }
         return this;
     }
@@ -116,7 +116,7 @@ public final class StringParameter {
     public StringParameter greaterThan(String minValue) {
         Objects.requireNonNull(minValue);
         if (value != null && value.compareTo(minValue) <= 0) {
-            throw new IllegalStateException(Messages.Parameter.valueNotLarger.get(name, minValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueNotLarger(name, minValue, value));
         }
         return this;
     }
@@ -132,7 +132,7 @@ public final class StringParameter {
     public StringParameter smallerThan(String maxValue) {
         Objects.requireNonNull(maxValue);
         if (value != null && value.compareTo(maxValue) >= 0) {
-            throw new IllegalStateException(Messages.Parameter.valueNotSmaller.get(name, maxValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueNotSmaller(name, maxValue, value));
         }
         return this;
     }
@@ -160,7 +160,7 @@ public final class StringParameter {
      */
     public StringParameter notEmpty() {
         if (value != null && value.isEmpty()) {
-            throw new IllegalStateException(Messages.StringParameter.empty.get(name));
+            throw new IllegalStateException(Messages.StringParameter.empty(name));
         }
         return this;
     }
@@ -173,7 +173,7 @@ public final class StringParameter {
      */
     public StringParameter notBlank() {
         if (value != null && isBlank(value)) {
-            throw new IllegalStateException(Messages.StringParameter.empty.get(name));
+            throw new IllegalStateException(Messages.StringParameter.empty(name));
         }
         return this;
     }
@@ -199,7 +199,7 @@ public final class StringParameter {
     public StringParameter matching(Pattern pattern) {
         Objects.requireNonNull(pattern);
         if (value != null && !pattern.matcher(value).matches()) {
-            throw new IllegalStateException(Messages.StringParameter.noMatch.get(name, pattern, value));
+            throw new IllegalStateException(Messages.StringParameter.noMatch(name, pattern, value));
         }
         return this;
     }

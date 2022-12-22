@@ -64,7 +64,7 @@ public final class LongParameter {
      */
     public long requiredValue() {
         if (!isSet) {
-            throw new IllegalStateException(Messages.Parameter.missing.get(name));
+            throw new IllegalStateException(Messages.Parameter.missing(name));
         }
         return value;
     }
@@ -88,7 +88,7 @@ public final class LongParameter {
      */
     public LongParameter atLeast(long minValue) {
         if (isSet && value < minValue) {
-            throw new IllegalStateException(Messages.Parameter.valueSmaller.get(name, minValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueSmaller(name, minValue, value));
         }
         return this;
     }
@@ -102,7 +102,7 @@ public final class LongParameter {
      */
     public LongParameter atMost(long maxValue) {
         if (isSet && value > maxValue) {
-            throw new IllegalStateException(Messages.Parameter.valueLarger.get(name, maxValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueLarger(name, maxValue, value));
         }
         return this;
     }
@@ -116,7 +116,7 @@ public final class LongParameter {
      */
     public LongParameter greaterThan(long minValue) {
         if (isSet && value <= minValue) {
-            throw new IllegalStateException(Messages.Parameter.valueNotLarger.get(name, minValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueNotLarger(name, minValue, value));
         }
         return this;
     }
@@ -130,7 +130,7 @@ public final class LongParameter {
      */
     public LongParameter smallerThan(long maxValue) {
         if (isSet && value >= maxValue) {
-            throw new IllegalStateException(Messages.Parameter.valueNotSmaller.get(name, maxValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueNotSmaller(name, maxValue, value));
         }
         return this;
     }
@@ -224,7 +224,7 @@ public final class LongParameter {
         try {
             return Long.parseLong(value);
         } catch (NumberFormatException e) {
-            throw new IllegalStateException(Messages.LongParameter.invalidValue.get(name, value), e);
+            throw new IllegalStateException(Messages.LongParameter.invalidValue(name, value), e);
         }
     }
 }

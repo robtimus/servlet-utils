@@ -22,7 +22,7 @@
   <parent>
     <groupId>com.github.robtimus</groupId>
     <artifactId>robtimus-parent</artifactId>
-    <version>1.4.3</version>
+    <version>1.6</version>
     <relativePath />
   </parent>
 
@@ -65,7 +65,6 @@
     <version.io-functions>2.0</version.io-functions>
     <version.jetty-servlet>9.4.44.v20210927</version.jetty-servlet>
     <version.servlet-api>4.0.4</version.servlet-api>
-    <!-- Use version 1.7.32 to match the latest release; this will allow Snyk to warn for vulnerabilities -->
     <version.slf4j>1.7.32</version.slf4j>
   </properties>
 
@@ -80,6 +79,7 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
+      <version>${version.slf4j}</version>
       <scope>provided</scope>
     </dependency>
 
@@ -104,7 +104,6 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-inline</artifactId>
-      <version>${version.mockito}</version>
       <scope>test</scope>
     </dependency>
 

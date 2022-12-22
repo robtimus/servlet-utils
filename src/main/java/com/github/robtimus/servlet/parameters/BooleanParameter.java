@@ -56,7 +56,7 @@ public final class BooleanParameter {
      */
     public boolean requiredValue() {
         if (value == null) {
-            throw new IllegalStateException(Messages.Parameter.missing.get(name));
+            throw new IllegalStateException(Messages.Parameter.missing(name));
         }
         return value;
     }
@@ -150,7 +150,7 @@ public final class BooleanParameter {
             case "false":
                 return false;
             default:
-                throw new IllegalStateException(Messages.BooleanParameter.invalidValue.get(name, value));
+                throw new IllegalStateException(Messages.BooleanParameter.invalidValue(name, value));
         }
     }
 }

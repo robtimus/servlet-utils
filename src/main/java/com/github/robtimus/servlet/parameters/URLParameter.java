@@ -60,7 +60,7 @@ public final class URLParameter {
      */
     public URL requiredValue() {
         if (value == null) {
-            throw new IllegalStateException(Messages.Parameter.missing.get(name));
+            throw new IllegalStateException(Messages.Parameter.missing(name));
         }
         return value;
     }
@@ -84,7 +84,7 @@ public final class URLParameter {
      */
     public URLParameter protocolIs(String protocol) {
         if (value != null && !value.getProtocol().equals(protocol)) {
-            throw new IllegalStateException(Messages.URLParameter.protocolIsNot.get(name, protocol, value.getProtocol()));
+            throw new IllegalStateException(Messages.URLParameter.protocolIsNot(name, protocol, value.getProtocol()));
         }
         return this;
     }
@@ -111,7 +111,7 @@ public final class URLParameter {
     public URLParameter protocolIn(Collection<String> protocols) {
         Objects.requireNonNull(protocols);
         if (value != null && !protocols.contains(value.getProtocol())) {
-            throw new IllegalStateException(Messages.URLParameter.protocolNotIn.get(name, protocols, value.getProtocol()));
+            throw new IllegalStateException(Messages.URLParameter.protocolNotIn(name, protocols, value.getProtocol()));
         }
         return this;
     }
@@ -191,7 +191,7 @@ public final class URLParameter {
         try {
             return new URL(value);
         } catch (MalformedURLException e) {
-            throw new IllegalStateException(Messages.URLParameter.invalidValue.get(name, value), e);
+            throw new IllegalStateException(Messages.URLParameter.invalidValue(name, value), e);
         }
     }
 }

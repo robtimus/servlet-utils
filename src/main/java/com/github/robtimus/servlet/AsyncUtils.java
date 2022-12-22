@@ -79,7 +79,7 @@ public final class AsyncUtils {
                 try {
                     request.getAsyncContext().addListener(new ServletConsumerAsyncListener(action, request, response));
                 } catch (IllegalStateException e) {
-                    LOGGER.warn(Messages.AsyncUtils.addListenerError.get(), e);
+                    LOGGER.warn(Messages.AsyncUtils.addListenerError(), e);
                     action.accept(request, response);
                 }
             } else {

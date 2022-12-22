@@ -61,7 +61,7 @@ public final class ComparableParameter<T extends Comparable<? super T>> {
      */
     public T requiredValue() {
         if (value == null) {
-            throw new IllegalStateException(Messages.Parameter.missing.get(name));
+            throw new IllegalStateException(Messages.Parameter.missing(name));
         }
         return value;
     }
@@ -87,7 +87,7 @@ public final class ComparableParameter<T extends Comparable<? super T>> {
     public ComparableParameter<T> atLeast(T minValue) {
         Objects.requireNonNull(minValue);
         if (value != null && value.compareTo(minValue) < 0) {
-            throw new IllegalStateException(Messages.Parameter.valueSmaller.get(name, minValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueSmaller(name, minValue, value));
         }
         return this;
     }
@@ -103,7 +103,7 @@ public final class ComparableParameter<T extends Comparable<? super T>> {
     public ComparableParameter<T> atMost(T maxValue) {
         Objects.requireNonNull(maxValue);
         if (value != null && value.compareTo(maxValue) > 0) {
-            throw new IllegalStateException(Messages.Parameter.valueLarger.get(name, maxValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueLarger(name, maxValue, value));
         }
         return this;
     }
@@ -119,7 +119,7 @@ public final class ComparableParameter<T extends Comparable<? super T>> {
     public ComparableParameter<T> greaterThan(T minValue) {
         Objects.requireNonNull(minValue);
         if (value != null && value.compareTo(minValue) <= 0) {
-            throw new IllegalStateException(Messages.Parameter.valueNotLarger.get(name, minValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueNotLarger(name, minValue, value));
         }
         return this;
     }
@@ -135,7 +135,7 @@ public final class ComparableParameter<T extends Comparable<? super T>> {
     public ComparableParameter<T> smallerThan(T maxValue) {
         Objects.requireNonNull(maxValue);
         if (value != null && value.compareTo(maxValue) >= 0) {
-            throw new IllegalStateException(Messages.Parameter.valueNotSmaller.get(name, maxValue, value));
+            throw new IllegalStateException(Messages.Parameter.valueNotSmaller(name, maxValue, value));
         }
         return this;
     }
@@ -255,7 +255,7 @@ public final class ComparableParameter<T extends Comparable<? super T>> {
         try {
             return converter.apply(value);
         } catch (RuntimeException e) {
-            throw new IllegalStateException(Messages.Parameter.invalidValue.get(name, value), e);
+            throw new IllegalStateException(Messages.Parameter.invalidValue(name, value), e);
         }
     }
 }

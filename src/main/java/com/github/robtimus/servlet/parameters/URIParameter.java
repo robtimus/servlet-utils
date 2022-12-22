@@ -60,7 +60,7 @@ public final class URIParameter {
      */
     public URI requiredValue() {
         if (value == null) {
-            throw new IllegalStateException(Messages.Parameter.missing.get(name));
+            throw new IllegalStateException(Messages.Parameter.missing(name));
         }
         return value;
     }
@@ -84,7 +84,7 @@ public final class URIParameter {
      */
     public URIParameter schemeIs(String scheme) {
         if (value != null && !value.getScheme().equals(scheme)) {
-            throw new IllegalStateException(Messages.URIParameter.schemeIsNot.get(name, scheme, value.getScheme()));
+            throw new IllegalStateException(Messages.URIParameter.schemeIsNot(name, scheme, value.getScheme()));
         }
         return this;
     }
@@ -111,7 +111,7 @@ public final class URIParameter {
     public URIParameter schemeIn(Collection<String> schemes) {
         Objects.requireNonNull(schemes);
         if (value != null && !schemes.contains(value.getScheme())) {
-            throw new IllegalStateException(Messages.URIParameter.schemeNotIn.get(name, schemes, value.getScheme()));
+            throw new IllegalStateException(Messages.URIParameter.schemeNotIn(name, schemes, value.getScheme()));
         }
         return this;
     }
@@ -191,7 +191,7 @@ public final class URIParameter {
         try {
             return new URI(value);
         } catch (URISyntaxException e) {
-            throw new IllegalStateException(Messages.URIParameter.invalidValue.get(name, value), e);
+            throw new IllegalStateException(Messages.URIParameter.invalidValue(name, value), e);
         }
     }
 }

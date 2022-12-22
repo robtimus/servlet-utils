@@ -222,7 +222,7 @@ public abstract class BodyCapturingFilter implements Filter {
             result.get();
             return result;
         } catch (LinkageError e) {
-            LOGGER.warn(Messages.BodyCapturingFilter.requestCharacterEncodingNotAvailable.get(e));
+            LOGGER.warn(Messages.BodyCapturingFilter.requestCharacterEncodingNotAvailable(e));
             return () -> null;
         }
     }
@@ -236,7 +236,7 @@ public abstract class BodyCapturingFilter implements Filter {
             result.get();
             return result;
         } catch (LinkageError e) {
-            LOGGER.warn(Messages.BodyCapturingFilter.responseCharacterEncodingNotAvailable.get(e));
+            LOGGER.warn(Messages.BodyCapturingFilter.responseCharacterEncodingNotAvailable(e));
             return () -> null;
         }
     }
@@ -592,7 +592,7 @@ public abstract class BodyCapturingFilter implements Filter {
             if (bodyCapturingInputStream != null) {
                 return bodyCapturingInputStream.captured();
             }
-            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured.get());
+            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured());
         }
 
         /**
@@ -614,7 +614,7 @@ public abstract class BodyCapturingFilter implements Filter {
                 Charset charset = encoding != null ? Charset.forName(encoding) : StandardCharsets.UTF_8;
                 return bodyCapturingInputStream.captured(charset);
             }
-            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured.get());
+            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured());
         }
 
         /**
@@ -628,7 +628,7 @@ public abstract class BodyCapturingFilter implements Filter {
             if (bodyCapturingReader != null) {
                 return bodyCapturingReader.captured();
             }
-            throw new IllegalStateException(Messages.BodyCapturingFilter.noTextCaptured.get());
+            throw new IllegalStateException(Messages.BodyCapturingFilter.noTextCaptured());
         }
 
         /**
@@ -763,7 +763,7 @@ public abstract class BodyCapturingFilter implements Filter {
             if (bodyCapturingOutputStream != null) {
                 return bodyCapturingOutputStream.captured();
             }
-            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured.get());
+            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured());
         }
 
         /**
@@ -785,7 +785,7 @@ public abstract class BodyCapturingFilter implements Filter {
                 Charset charset = encoding != null ? Charset.forName(encoding) : StandardCharsets.UTF_8;
                 return bodyCapturingOutputStream.captured(charset);
             }
-            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured.get());
+            throw new IllegalStateException(Messages.BodyCapturingFilter.noBytesCaptured());
         }
 
         /**
@@ -799,7 +799,7 @@ public abstract class BodyCapturingFilter implements Filter {
             if (bodyCapturingWriter != null) {
                 return bodyCapturingWriter.captured();
             }
-            throw new IllegalStateException(Messages.BodyCapturingFilter.noTextCaptured.get());
+            throw new IllegalStateException(Messages.BodyCapturingFilter.noTextCaptured());
         }
 
         /**

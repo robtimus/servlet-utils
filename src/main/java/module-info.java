@@ -15,8 +15,13 @@
  * limitations under the License.
  */
 
+/**
+ * Provides utility classes for working with servlets
+ *
+ * @author Rob Spoor
+ */
 module com.github.robtimus.servlet {
-    requires transitive java.servlet;
+    requires transitive jakarta.servlet;
     requires transitive com.github.robtimus.io.functions;
     requires org.slf4j;
 

@@ -19,10 +19,10 @@ package com.github.robtimus.servlet.parameters;
 
 import java.util.Objects;
 import java.util.function.UnaryOperator;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletConfig;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletRequest;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletConfig;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletRequest;
 
 /**
  * Represents a parameter that should have a double value.

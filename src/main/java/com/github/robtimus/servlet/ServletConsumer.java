@@ -20,8 +20,8 @@ package com.github.robtimus.servlet;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.function.BiConsumer;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
 
 /**
  *

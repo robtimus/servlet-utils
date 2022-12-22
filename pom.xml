@@ -62,10 +62,15 @@
   </issueManagement>
 
   <properties>
+    <version.java>11</version.java>
+
     <version.io-functions>2.0</version.io-functions>
-    <version.jetty-servlet>9.4.44.v20210927</version.jetty-servlet>
-    <version.servlet-api>4.0.4</version.servlet-api>
-    <version.slf4j>1.7.32</version.slf4j>
+    <version.jetty-servlet>11.0.13</version.jetty-servlet>
+    <version.servlet-api>5.0.0</version.servlet-api>
+    <version.slf4j>1.7.36</version.slf4j>
+
+    <version.plugin.javadoc>3.4.0</version.plugin.javadoc>
+    <version.plugin.site>3.12.0</version.plugin.site>
   </properties>
 
   <dependencies>
@@ -114,6 +119,20 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- Include jetty-server so jetty-jakarta-servlet-api can be excluded, which conflicts with jakarta.servlet-api -->
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-server</artifactId>
+      <version>${version.jetty-servlet}</version>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.eclipse.jetty.toolchain</groupId>
+          <artifactId>jetty-jakarta-servlet-api</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-client</artifactId>
@@ -144,7 +163,7 @@
           <artifactId>maven-javadoc-plugin</artifactId>
           <configuration>
             <links>
-              <link>https://jakarta.ee/specifications/platform/8/apidocs/</link>
+              <link>https://jakarta.ee/specifications/platform/9/apidocs/</link>
             </links>
           </configuration>
         </plugin>
@@ -240,11 +259,6 @@
       </plugin>
 
       <plugin>
-        <groupId>org.moditect</groupId>
-        <artifactId>moditect-maven-plugin</artifactId>
-      </plugin>
-
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
       </plugin>
@@ -268,6 +282,14 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Allow JUnit to fully access the test classes -->
+          <argLine>
+            --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet=ALL-UNNAMED
+            --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.http=ALL-UNNAMED
+            --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.parameters=ALL-UNNAMED
+          </argLine>
+        </configuration>
       </plugin>
 
       <plugin>
@@ -306,61 +328,4 @@
       </plugin>
     </plugins>
   </build>
-
-  <profiles>
-    <profile>
-      <id>min-versions</id>
-      <properties>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>native-module</id>
-      <properties>
-        <version.java>11</version.java>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-surefire-plugin</artifactId>
-            <configuration>
-              <!-- Allow JUnit to fully access the test classes -->
-              <argLine>
-                --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet=ALL-UNNAMED
-                --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.http=ALL-UNNAMED
-                --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.parameters=ALL-UNNAMED
-              </argLine>
-            </configuration>
-          </plugin>
-
-          <plugin>
-            <groupId>org.moditect</groupId>
-            <artifactId>moditect-maven-plugin</artifactId>
-            <configuration>
-              <skip>true</skip>
-            </configuration>
-          </plugin>
-
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>${project.basedir}/src/moditect</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

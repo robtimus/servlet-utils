@@ -34,18 +34,18 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.ServletInputStream;
-import javax.servlet.ServletOutputStream;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletRequestWrapper;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletInputStream;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.github.robtimus.servlet.AsyncUtils;
@@ -64,7 +64,7 @@ import com.github.robtimus.servlet.parameters.IntParameter;
  * If that's not possible, the following initialization parameters are available to attempt to ensure {@link #onBodyCaptured(BodyCapturingRequest)} is
  * still called:
  * <blockquote>
- * <table border="0" cellspacing="3" cellpadding="0">
+ * <table class="striped">
  *   <caption style="display:none">Supported initialization parameters</caption>
  *   <thead>
  *     <tr>
@@ -95,7 +95,7 @@ import com.github.robtimus.servlet.parameters.IntParameter;
  * </blockquote>
  * In addition, the following initialization parameters are available to tweak the amount of storage needed to capture request and response bodies:
  * <blockquote>
- * <table border="0" cellspacing="3" cellpadding="0">
+ * <table class="striped">
  *   <caption style="display:none">Supported initialization parameters</caption>
  *   <thead>
  *     <tr>

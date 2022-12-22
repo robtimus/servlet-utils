@@ -33,17 +33,17 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.servlet.DispatcherType;
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.client.util.StringRequestContent;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletHolder;
@@ -83,9 +83,11 @@ class HttpServletUtilsTest extends ServletTestBase {
                 ContentResponse response = assertDoesNotThrow(() -> request
                         .method(HttpMethod.POST)
                         .path("/")
-                        .header("x-custom", "1")
-                        .header("x-custom", "2")
-                        .content(new StringContentProvider("text/plain", "Hello world", StandardCharsets.UTF_8))
+                        .headers(headers -> {
+                            headers.add("x-custom", "1");
+                            headers.add("x-custom", "2");
+                        })
+                        .body(new StringRequestContent("text/plain", "Hello world", StandardCharsets.UTF_8))
                         .send());
 
                 assertEquals(200, response.getStatus());

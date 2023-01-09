@@ -71,6 +71,8 @@
 
     <version.plugin.javadoc>3.4.0</version.plugin.javadoc>
     <version.plugin.site>3.12.0</version.plugin.site>
+
+    <argLine />
   </properties>
 
   <dependencies>
@@ -285,6 +287,7 @@
         <configuration>
           <!-- Allow JUnit to fully access the test classes -->
           <argLine>
+            @{argLine}
             --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet=ALL-UNNAMED
             --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.http=ALL-UNNAMED
             --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.parameters=ALL-UNNAMED

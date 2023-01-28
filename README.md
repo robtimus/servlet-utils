@@ -1,8 +1,11 @@
 # servlet-utils
+[![Maven Central](https://img.shields.io/maven-central/v/com.github.robtimus/servlet-utils?versionPrefix=1)](https://search.maven.org/artifact/com.github.robtimus/servlet-utils)
+[![Build](https://github.com/robtimus/servlet-utils/actions/workflows/build.yml/badge.svg?branch=1.x)](https://github.com/robtimus/servlet-utils/actions/workflows/build.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=com.github.robtimus%3Aservlet-utils&branch=1.x&metric=alert_status)](https://sonarcloud.io/summary/overall?id=com.github.robtimus%3Aservlet-utils&branch=1.x)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=com.github.robtimus%3Aservlet-utils&branch=1.x&metric=coverage)](https://sonarcloud.io/summary/overall?id=com.github.robtimus%3Aservlet-utils&branch=1.x)
+[![Known Vulnerabilities](https://snyk.io/test/github/robtimus/servlet-utils/1.x/badge.svg)](https://snyk.io/test/github/robtimus/servlet-utils/1.x)
 
-Provides utility classes for working with servlets. Below are some examples; for a full list, see the [API](
-https://robtimus.github.io/servlet-utils/apidocs/).
-
+Provides utility classes for working with servlets. Below are some examples; for a full list, see the [API](https://robtimus.github.io/servlet-utils/apidocs/).
 
 ## Init parameter reading
 

@@ -7270,17 +7270,6 @@ class BodyCapturingFilterTest {
             isConsumed = false;
         }
 
-        private String text(CaptureMode captureMode, Supplier<String> ifText, Supplier<String> ifBytes) {
-            switch (captureMode) {
-                case TEXT:
-                    return ifText.get();
-                case BYTES:
-                    return ifBytes.get();
-                default:
-                    return null;
-            }
-        }
-
         private CapturedData(byte[] bytes, boolean isConsumed) {
             this.captureMode = CaptureMode.BYTES;
             this.bytes = bytes;
@@ -7319,6 +7308,17 @@ class BodyCapturingFilterTest {
             this.text = text;
             this.totalSize = totalSize;
             this.isConsumed = isConsumed;
+        }
+
+        private String text(CaptureMode captureMode, Supplier<String> ifText, Supplier<String> ifBytes) {
+            switch (captureMode) {
+                case TEXT:
+                    return ifText.get();
+                case BYTES:
+                    return ifBytes.get();
+                default:
+                    return null;
+            }
         }
 
         private static CapturedData none() {

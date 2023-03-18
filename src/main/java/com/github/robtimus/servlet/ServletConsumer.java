@@ -24,7 +24,6 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 
 /**
- *
  * An operation that takes a {@link ServletRequest} and {@link ServletResponse} and returns no result.
  * This is a specialization of {@link BiConsumer} that allows {@link IOException} to be thrown.
  *

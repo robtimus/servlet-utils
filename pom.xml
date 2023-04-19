@@ -65,7 +65,7 @@
     <version.java>11</version.java>
 
     <version.io-functions>2.0</version.io-functions>
-    <version.jetty-servlet>11.0.13</version.jetty-servlet>
+    <version.jetty-servlet>11.0.15</version.jetty-servlet>
     <version.servlet-api>5.0.0</version.servlet-api>
     <version.slf4j>1.7.36</version.slf4j>
   </properties>

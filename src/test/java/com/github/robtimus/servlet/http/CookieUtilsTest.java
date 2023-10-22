@@ -145,7 +145,7 @@ class CookieUtilsTest {
         return "name" + number;
     }
 
-    private static class ExistingCookieNameProvider implements ArgumentsProvider {
+    private static final class ExistingCookieNameProvider implements ArgumentsProvider {
 
         @Override
         public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
@@ -155,7 +155,7 @@ class CookieUtilsTest {
         }
     }
 
-    private static class NonExistingCookieNameProvider implements ArgumentsProvider {
+    private static final class NonExistingCookieNameProvider implements ArgumentsProvider {
 
         @Override
         public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {

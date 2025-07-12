@@ -38,6 +38,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
+import org.junit.jupiter.params.support.ParameterDeclarations;
 
 @SuppressWarnings("nls")
 class CookieUtilsTest {
@@ -148,7 +149,7 @@ class CookieUtilsTest {
     private static final class ExistingCookieNameProvider implements ArgumentsProvider {
 
         @Override
-        public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+        public Stream<? extends Arguments> provideArguments(ParameterDeclarations parameters, ExtensionContext context) {
             return IntStream.range(MIN_COOKIE_NUMBER, MAX_COOKIE_NUMBER)
                     .mapToObj(CookieUtilsTest::cookieName)
                     .map(Arguments::arguments);
@@ -158,7 +159,7 @@ class CookieUtilsTest {
     private static final class NonExistingCookieNameProvider implements ArgumentsProvider {
 
         @Override
-        public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+        public Stream<? extends Arguments> provideArguments(ParameterDeclarations parameters, ExtensionContext context) {
             IntStream before = IntStream.range(MIN_COOKIE_NUMBER - 5, MIN_COOKIE_NUMBER);
             IntStream after = IntStream.range(MAX_COOKIE_NUMBER, MAX_COOKIE_NUMBER + 5);
 

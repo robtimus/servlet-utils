@@ -162,6 +162,13 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>properties</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
 
       <plugin>
@@ -266,9 +273,10 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <!-- Allow JUnit to fully access the test classes -->
           <argLine>
             @{argLine}
+            -javaagent:${org.mockito:mockito-core:jar}
+            <!-- Allow JUnit to fully access the test classes -->
             --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet=ALL-UNNAMED
             --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.http=ALL-UNNAMED
             --add-opens com.github.robtimus.servlet/com.github.robtimus.servlet.parameters=ALL-UNNAMED

@@ -6698,7 +6698,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("non-null")
-                @SuppressWarnings("resource")
                 void testAppendNonNullCharSequence() throws IOException {
                     StringWriter sw = new StringWriter(TEXT.length());
                     try (BodyCapturingWriter writer = createWriter(sw)) {
@@ -6714,7 +6713,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("null")
-                @SuppressWarnings("resource")
                 void testAppendNullCharSequence() throws IOException {
                     StringWriter sw = new StringWriter(TEXT.length());
                     try (BodyCapturingWriter writer = createWriter(sw)) {
@@ -6737,7 +6735,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("non-null")
-                @SuppressWarnings("resource")
                 void testAppendNonNullCharSequencePortion() throws IOException {
                     StringWriter sw = new StringWriter(TEXT.length());
                     try (BodyCapturingWriter writer = createWriter(sw)) {
@@ -6754,7 +6751,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("null")
-                @SuppressWarnings("resource")
                 void testAppendNullCharSequence() throws IOException {
                     StringWriter sw = new StringWriter(TEXT.length());
                     try (BodyCapturingWriter writer = createWriter(sw)) {
@@ -6773,7 +6769,6 @@ class BodyCapturingFilterTest {
 
             @Test
             @DisplayName("append(char)")
-            @SuppressWarnings("resource")
             void testAppendChar() throws IOException {
                 StringWriter sw = new StringWriter(TEXT.length());
                 try (BodyCapturingWriter writer = createWriter(sw)) {
@@ -6900,7 +6895,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("non-null")
-                @SuppressWarnings("resource")
                 void testAppendNonNullCharSequence() throws IOException {
                     int limit = 13;
                     AtomicInteger limitReachedCount = new AtomicInteger(0);
@@ -6919,7 +6913,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("null")
-                @SuppressWarnings("resource")
                 void testAppendNullCharSequence() throws IOException {
                     int limit = 5;
                     AtomicInteger limitReachedCount = new AtomicInteger(0);
@@ -6944,7 +6937,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("non-null")
-                @SuppressWarnings("resource")
                 void testAppendNonNullCharSequencePortion() throws IOException {
                     int limit = 13;
                     AtomicInteger limitReachedCount = new AtomicInteger(0);
@@ -6964,7 +6956,6 @@ class BodyCapturingFilterTest {
 
                 @Test
                 @DisplayName("null")
-                @SuppressWarnings("resource")
                 void testAppendNullCharSequence() throws IOException {
                     int limit = 5;
                     AtomicInteger limitReachedCount = new AtomicInteger(0);
@@ -6986,7 +6977,6 @@ class BodyCapturingFilterTest {
 
             @Test
             @DisplayName("append(char)")
-            @SuppressWarnings("resource")
             void testAppendChar() throws IOException {
                 int limit = 13;
                 AtomicInteger limitReachedCount = new AtomicInteger(0);

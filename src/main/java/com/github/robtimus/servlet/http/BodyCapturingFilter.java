@@ -562,7 +562,7 @@ public abstract class BodyCapturingFilter implements Filter {
         }
 
         /**
-         * Returns the capture mode:
+         * Returns the capture mode. It will be:
          * <ul>
          * <li>{@link CaptureMode#BYTES} if {@link ServletRequest#getInputStream()} was used.</li>
          * <li>{@link CaptureMode#TEXT} if {@link ServletRequest#getReader()} was used.</li>
@@ -733,7 +733,7 @@ public abstract class BodyCapturingFilter implements Filter {
         }
 
         /**
-         * Returns the capture mode:
+         * Returns the capture mode. It will be:
          * <ul>
          * <li>{@link CaptureMode#BYTES} if {@link ServletResponse#getOutputStream()} was used.</li>
          * <li>{@link CaptureMode#TEXT} if {@link ServletResponse#getWriter()} was used.</li>

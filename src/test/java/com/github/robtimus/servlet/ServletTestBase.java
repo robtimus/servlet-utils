@@ -22,10 +22,10 @@ import java.security.SecureRandom;
 import java.util.Random;
 import java.util.function.Consumer;
 import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.Request;
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 @SuppressWarnings({ "nls", "javadoc" })
@@ -53,8 +53,9 @@ public abstract class ServletTestBase {
         serverConnector = new ServerConnector(server);
         server.addConnector(serverConnector);
 
-        ServletContextHandler servletContext = new ServletContextHandler(server, "/");
+        ServletContextHandler servletContext = new ServletContextHandler("/");
         containerConfigurer.accept(servletContext);
+        server.setHandler(servletContext);
 
         assertDoesNotThrow(server::start);
     }
@@ -67,6 +68,7 @@ public abstract class ServletTestBase {
         QueuedThreadPool pool = new QueuedThreadPool();
         pool.setName("client");
 
+        @SuppressWarnings("resource")
         HttpClient client = new HttpClient();
         client.setExecutor(pool);
         assertDoesNotThrow(client::start);

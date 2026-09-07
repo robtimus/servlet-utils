@@ -67,12 +67,12 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
-import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.StringRequestContent;
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.StringRequestContent;
+import org.eclipse.jetty.ee10.servlet.FilterHolder;
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.http.HttpMethod;
-import org.eclipse.jetty.servlet.FilterHolder;
-import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHolder;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -104,7 +104,9 @@ class BodyCapturingFilterTest {
         @BeforeEach
         void initFilterConfig() {
             filterConfig = mock(FilterConfig.class);
-            when(filterConfig.getServletContext()).thenReturn(mock(ServletContext.class));
+
+            ServletContext servletContext = mock(ServletContext.class);
+            when(filterConfig.getServletContext()).thenReturn(servletContext);
         }
 
         @Test
@@ -5518,7 +5520,9 @@ class BodyCapturingFilterTest {
         @BeforeEach
         void initFilterConfig() {
             filterConfig = mock(FilterConfig.class);
-            when(filterConfig.getServletContext()).thenReturn(mock(ServletContext.class));
+
+            ServletContext servletContext = mock(ServletContext.class);
+            when(filterConfig.getServletContext()).thenReturn(servletContext);
         }
 
         @Test
@@ -5577,7 +5581,9 @@ class BodyCapturingFilterTest {
         @BeforeEach
         void initFilter() {
             FilterConfig filterConfig = mock(FilterConfig.class);
-            when(filterConfig.getServletContext()).thenReturn(mock(ServletContext.class));
+
+            ServletContext servletContext = mock(ServletContext.class);
+            when(filterConfig.getServletContext()).thenReturn(servletContext);
 
             filter = new TestFilter();
             filter.init(filterConfig);

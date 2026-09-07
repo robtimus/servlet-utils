@@ -27,7 +27,7 @@
   </parent>
 
   <artifactId>servlet-utils</artifactId>
-  <version>2.1-SNAPSHOT</version>
+  <version>3.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>servlet-utils</name>
@@ -62,11 +62,12 @@
   </issueManagement>
 
   <properties>
-    <version.java>11</version.java>
+    <version.java>17</version.java>
 
     <version.io-functions>2.0</version.io-functions>
-    <version.jetty-servlet>11.0.26</version.jetty-servlet>
-    <version.servlet-api>5.0.0</version.servlet-api>
+    <version.junit>6.1.3</version.junit>
+    <version.jetty-servlet>12.1.13</version.jetty-servlet>
+    <version.servlet-api>6.0.0</version.servlet-api>
     <version.slf4j>1.7.36</version.slf4j>
   </properties>
 
@@ -110,8 +111,8 @@
     </dependency>
 
     <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-servlet</artifactId>
+      <groupId>org.eclipse.jetty.ee10</groupId>
+      <artifactId>jetty-ee10-servlet</artifactId>
       <version>${version.jetty-servlet}</version>
       <scope>test</scope>
     </dependency>

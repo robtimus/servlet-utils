@@ -42,11 +42,11 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.StringRequestContent;
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.StringRequestContent;
+import org.eclipse.jetty.ee10.servlet.FilterHolder;
+import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.http.HttpMethod;
-import org.eclipse.jetty.servlet.FilterHolder;
-import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import com.github.robtimus.servlet.ServletTestBase;
@@ -63,7 +63,6 @@ class HttpServletUtilsTest extends ServletTestBase {
             FilterHolder filter = new FilterHolder(captureHeaderFilter);
             context.addFilter(filter, "/*", EnumSet.allOf(DispatcherType.class));
 
-            @SuppressWarnings("serial")
             ServletHolder servlet = new ServletHolder(new HttpServlet() {
                 @Override
                 @SuppressWarnings("resource")
